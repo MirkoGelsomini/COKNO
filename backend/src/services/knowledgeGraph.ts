@@ -118,18 +118,79 @@ export interface RelatedTag {
   relation: RelationType;
 }
 
+const CONCEPTNET_TIMEOUT_MS = 5000;
+const CONCEPTNET_CACHE_TTL_MS = 30 * 60 * 1000;
+const conceptNetCache = new Map<string, { relations: Relation[]; expiresAt: number }>();
+
+async function fetchConceptNetRelations(term: string): Promise<Relation[]> {
+  const cached = conceptNetCache.get(term);
+  if (cached && Date.now() < cached.expiresAt) return cached.relations;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CONCEPTNET_TIMEOUT_MS);
+
+  try {
+    const encoded = encodeURIComponent(term.replace(/\s+/g, "_"));
+    const res = await fetch(`https://api.conceptnet.io/c/en/${encoded}?limit=20`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as any;
+    const edges: any[] = data.edges ?? [];
+    const relations: Relation[] = [];
+    const seen = new Set<string>();
+
+    for (const e of edges) {
+      const startId: string = e.start?.["@id"] ?? "";
+      const endId: string = e.end?.["@id"] ?? "";
+      const startLabel: string | undefined = e.start?.label?.toLowerCase();
+      const endLabel: string | undefined = e.end?.label?.toLowerCase();
+      const relLabel: string | undefined = e.rel?.label;
+      if (!startLabel || !endLabel || !relLabel) continue;
+      if (!startId.startsWith("/c/en/") || !endId.startsWith("/c/en/")) continue;
+
+      const isStart = startLabel === term.toLowerCase();
+      const target = isStart ? endLabel : startLabel;
+      if (target === term.toLowerCase() || seen.has(target)) continue;
+
+      let type: RelationType;
+      if (relLabel === "Synonym") type = "synonym";
+      else if (relLabel === "IsA") type = isStart ? "broader" : "narrower";
+      else type = "related";
+
+      relations.push({ type, target });
+      seen.add(target);
+      if (relations.length >= 8) break;
+    }
+
+    conceptNetCache.set(term, { relations, expiresAt: Date.now() + CONCEPTNET_CACHE_TTL_MS });
+    return relations;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Curated graph first (guaranteed quality for the hand-tuned photography
+// domain terms), live ConceptNet lookup for everything else.
+async function getRelations(term: string): Promise<Relation[]> {
+  const node = graph[term];
+  if (node) return node.relations;
+  return fetchConceptNetRelations(term);
+}
+
 // Returns query terms expanded with synonyms for better search coverage
-export function expandQuery(query: string): string[] {
+export async function expandQuery(query: string): Promise<string[]> {
   const terms = query.toLowerCase().split(/\s+/);
   const expanded = new Set<string>(terms);
 
   for (const term of terms) {
-    const node = graph[term];
-    if (node) {
-      for (const rel of node.relations) {
-        if (rel.type === "synonym") {
-          expanded.add(rel.target);
-        }
+    const relations = await getRelations(term);
+    for (const rel of relations) {
+      if (rel.type === "synonym") {
+        expanded.add(rel.target);
       }
     }
   }
@@ -138,12 +199,10 @@ export function expandQuery(query: string): string[] {
 }
 
 // Returns semantically related tags to show in the UI
-export function getRelatedTags(query: string): RelatedTag[] {
+export async function getRelatedTags(query: string): Promise<RelatedTag[]> {
   const term = query.toLowerCase().trim();
-  const node = graph[term];
-  if (!node) return [];
-
-  return node.relations.map((r) => ({ tag: r.target, relation: r.type }));
+  const relations = await getRelations(term);
+  return relations.map((r) => ({ tag: r.target, relation: r.type }));
 }
 
 // Returns the full graph as an array of nodes

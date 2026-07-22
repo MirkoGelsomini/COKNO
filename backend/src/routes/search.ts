@@ -53,7 +53,7 @@ router.get("/search", async (req: Request, res: Response) => {
     ? (category as Category)
     : undefined;
 
-  const searchQuery = expand === "true" ? expandQuery(q).join(" ") : q;
+  const searchQuery = expand === "true" ? (await expandQuery(q)).join(" ") : q;
   const pageNum = parseInt(page as string);
   const key = cacheKey(searchQuery, cat ?? "all", pageNum, expand as string);
 
@@ -62,7 +62,7 @@ router.get("/search", async (req: Request, res: Response) => {
     return res.json({ ...(cached as object), cached: true });
   }
 
-  const relatedTags = getRelatedTags(q);
+  const relatedTags = await getRelatedTags(q);
   const connectors = getConnectors(cat);
 
   const settled = await Promise.allSettled(
@@ -108,12 +108,13 @@ router.get("/graph", (_req: Request, res: Response) => {
 });
 
 // GET /api/graph/expand?tag=nature
-router.get("/graph/expand", (req: Request, res: Response) => {
+router.get("/graph/expand", async (req: Request, res: Response) => {
   const { tag } = req.query;
   if (!tag || typeof tag !== "string") {
     return res.status(400).json({ error: "Parameter 'tag' is required" });
   }
-  return res.json({ tag, expandedTerms: expandQuery(tag), relatedTags: getRelatedTags(tag) });
+  const [expandedTerms, relatedTags] = await Promise.all([expandQuery(tag), getRelatedTags(tag)]);
+  return res.json({ tag, expandedTerms, relatedTags });
 });
 
 export default router;

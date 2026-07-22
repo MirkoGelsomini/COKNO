@@ -12,7 +12,7 @@ const youtube: Connector = {
     try {
       const url =
         `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}` +
-        `&maxResults=12&type=video&key=${key}`;
+        `&maxResults=12&type=video&key=${key}&safeSearch=strict`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

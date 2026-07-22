@@ -13,7 +13,7 @@ const flickr: Connector = {
       const url =
         `https://www.flickr.com/services/rest/?method=flickr.photos.search` +
         `&api_key=${key}&text=${encodeURIComponent(query)}&format=json&nojsoncallback=1` +
-        `&per_page=12&page=${page}&extras=url_m,url_t,owner_name&license=1,2,3,4,5,6,9,10`;
+        `&per_page=12&page=${page}&extras=url_m,url_t,owner_name&license=1,2,3,4,5,6,9,10&safe_search=1`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

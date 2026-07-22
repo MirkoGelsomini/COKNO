@@ -20,6 +20,7 @@ const imgur: Connector = {
       const items: any[] = [];
 
       for (const entry of data.data ?? []) {
+        if (entry.nsfw) continue;
         if (entry.is_album) {
           const coverGif = (entry.images ?? []).find(
             (img: any) => img.type === "image/gif" || img.link?.endsWith(".gif")

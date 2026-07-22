@@ -18,21 +18,23 @@ const reddit: Connector = {
       const data = await res.json() as any;
       const children = data?.data?.children ?? [];
 
-      const items = children.map((child: any) => {
-        const post = child.data;
-        const thumbnail =
-          post.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, "&") ||
-          (post.thumbnail?.startsWith("http") ? post.thumbnail : undefined);
-        return {
-          id: post.id,
-          title: post.title || "Reddit GIF",
-          url: `https://www.reddit.com${post.permalink}`,
-          thumbnailUrl: thumbnail,
-          author: post.author,
-          source: "Reddit r/gifs",
-          category: "gifs",
-        };
-      });
+      const items = children
+        .filter((child: any) => !child.data?.over_18)
+        .map((child: any) => {
+          const post = child.data;
+          const thumbnail =
+            post.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, "&") ||
+            (post.thumbnail?.startsWith("http") ? post.thumbnail : undefined);
+          return {
+            id: post.id,
+            title: post.title || "Reddit GIF",
+            url: `https://www.reddit.com${post.permalink}`,
+            thumbnailUrl: thumbnail,
+            author: post.author,
+            source: "Reddit r/gifs",
+            category: "gifs",
+          };
+        });
 
       return { source: "Reddit r/gifs", total: items.length, items };
     } catch (err) {

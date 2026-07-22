@@ -10,7 +10,7 @@ const pixabay: Connector = {
     if (!key) return safeResult("Pixabay", "PIXABAY_API_KEY not set");
 
     try {
-      const url = `https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(query)}&image_type=photo&per_page=12&page=${page}`;
+      const url = `https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(query)}&image_type=photo&per_page=12&page=${page}&safesearch=true`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

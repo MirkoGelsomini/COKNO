@@ -10,7 +10,7 @@ const pixabayVideos: Connector = {
     if (!key) return safeResult("Pixabay Videos", "PIXABAY_API_KEY not set");
 
     try {
-      const url = `https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(query)}&per_page=12&page=${page}`;
+      const url = `https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(query)}&per_page=12&page=${page}&safesearch=true`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

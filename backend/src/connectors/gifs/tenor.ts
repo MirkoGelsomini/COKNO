@@ -11,7 +11,7 @@ const tenor: Connector = {
 
     try {
       const pos = (page - 1) * 12;
-      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${key}&limit=12&pos=${pos}`;
+      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${key}&limit=12&pos=${pos}&contentfilter=high`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

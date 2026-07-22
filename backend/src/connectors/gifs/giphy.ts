@@ -11,7 +11,7 @@ const giphy: Connector = {
 
     try {
       const offset = (page - 1) * 12;
-      const url = `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(query)}&limit=12&offset=${offset}`;
+      const url = `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(query)}&limit=12&offset=${offset}&rating=g`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

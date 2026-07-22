@@ -59,7 +59,6 @@ import gifimage from "./gifs/gifimage";
 import gifgifs from "./gifs/gifgifs";
 import tumblr from "./gifs/tumblr";
 import reactiongifs from "./gifs/reactiongifs";
-import bestanimations from "./gifs/bestanimations";
 import animatedimages from "./gifs/animatedimages";
 import makeagif from "./gifs/makeagif";
 import dribbble from "./gifs/dribbble";
@@ -121,10 +120,10 @@ const all: Connector[] = [
   pexelsVideos, pixabayVideos, wikimediaVideos, ted, videvo, pbs, khanacademy, mitocw,
   rumble, reuters, coursera, pond5, academicearth, bbc, crashcourse, gettyVideos,
 
-  // GIFs (20)
+  // GIFs (19)
   giphy, tenor, gifer, gifcities, imgur, reddit, pixabayGifs,
   imgflip, wifflegif, gifsec, gifimage, gifgifs,
-  tumblr, reactiongifs, bestanimations, animatedimages, makeagif, dribbble, lottiefiles, motionelements,
+  tumblr, reactiongifs, animatedimages, makeagif, dribbble, lottiefiles, motionelements,
 
   // 3D Models (20)
   sketchfab, thingiverse, free3d, archive3d,
