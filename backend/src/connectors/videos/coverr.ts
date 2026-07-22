@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { scrapePage } from "../../utils/browser";
+import { plainFetchPage } from "../../utils/browser";
 import { Connector, ConnectorResult, safeResult } from "../types";
 
 const coverr: Connector = {
@@ -9,8 +9,8 @@ const coverr: Connector = {
 
   async search(query): Promise<ConnectorResult> {
     try {
-      const url = `https://coverr.co/videos?search=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/videos/']");
+      const url = `https://coverr.co/s?q=${encodeURIComponent(query)}`;
+      const html = await plainFetchPage(url);
       const $ = cheerio.load(html);
       const items: any[] = [];
 

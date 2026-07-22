@@ -1,11 +1,45 @@
 import { Router, Request, Response } from "express";
 import { getConnectors, listSources } from "../connectors/registry";
 import { expandQuery, getRelatedTags, getFullGraph } from "../services/knowledgeGraph";
-import { Category } from "../connectors/types";
+import { Category, withTimeout } from "../connectors/types";
 
 const router = Router();
 
 const VALID_CATEGORIES: Category[] = ["images", "videos", "gifs", "models3d", "texts"];
+
+// Per-connector cutoff — bounds the worst case response time regardless of
+// how many of the ~100 connectors are slow or unresponsive.
+const CONNECTOR_TIMEOUT_MS = Number(process.env.CONNECTOR_TIMEOUT_MS) || 8000;
+
+// In-memory result cache (no persistent storage — just RAM, cleared on
+// restart) so repeated identical searches skip the full connector fan-out.
+const CACHE_TTL_MS = Number(process.env.SEARCH_CACHE_TTL_MS) || 10 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 200;
+const cache = new Map<string, { body: unknown; expiresAt: number }>();
+
+function cacheKey(q: string, cat: string, page: number, expand: string): string {
+  return `${q}::${cat}::${page}::${expand}`;
+}
+
+function getCached(key: string): unknown {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return undefined;
+  }
+  cache.delete(key);
+  cache.set(key, entry); // bump recency for LRU-style eviction
+  return entry.body;
+}
+
+function setCached(key: string, body: unknown): void {
+  if (cache.size >= CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) cache.delete(oldestKey);
+  }
+  cache.set(key, { body, expiresAt: Date.now() + CACHE_TTL_MS });
+}
 
 // GET /api/search?q=nature&category=images&page=1&expand=false
 router.get("/search", async (req: Request, res: Response) => {
@@ -20,11 +54,21 @@ router.get("/search", async (req: Request, res: Response) => {
     : undefined;
 
   const searchQuery = expand === "true" ? expandQuery(q).join(" ") : q;
+  const pageNum = parseInt(page as string);
+  const key = cacheKey(searchQuery, cat ?? "all", pageNum, expand as string);
+
+  const cached = getCached(key);
+  if (cached) {
+    return res.json({ ...(cached as object), cached: true });
+  }
+
   const relatedTags = getRelatedTags(q);
   const connectors = getConnectors(cat);
 
   const settled = await Promise.allSettled(
-    connectors.map((c) => c.search(searchQuery, parseInt(page as string)))
+    connectors.map((c) =>
+      withTimeout(c.search(searchQuery, pageNum), c.name, CONNECTOR_TIMEOUT_MS)
+    )
   );
 
   const sources = settled.map((s, i) =>
@@ -36,18 +80,21 @@ router.get("/search", async (req: Request, res: Response) => {
   const allItems = sources.flatMap((s) => s.items);
   const errors = sources.filter((s) => s.error).map((s) => ({ source: s.source, error: s.error }));
 
-  return res.json({
+  const body = {
     query: q,
     expandedQuery: expand === "true" ? searchQuery : null,
     relatedTags,
     category: cat ?? "all",
-    page: parseInt(page as string),
+    page: pageNum,
     totalSources: connectors.length,
     totalItems: allItems.length,
     sources: sources.map((s) => ({ source: s.source, count: s.items.length, error: s.error ?? null })),
     errors: errors.length ? errors : undefined,
     items: allItems,
-  });
+  };
+
+  setCached(key, body);
+  return res.json(body);
 });
 
 // GET /api/sources — list all available connectors

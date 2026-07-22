@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { scrapePage } from "../../utils/browser";
+import { scrapePage } from "../../utils/browserLimited";
 import { Connector, ConnectorResult, safeResult } from "../types";
 
 const gifer: Connector = {

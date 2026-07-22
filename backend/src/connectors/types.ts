@@ -33,3 +33,20 @@ export function safeResult(source: string, err: unknown): ConnectorResult {
   const message = err instanceof Error ? err.message : String(err);
   return { items: [], total: 0, source, error: message };
 }
+
+// Bounds a connector call so one slow/dead source can't hold up the whole
+// aggregated search response — the underlying call keeps running in the
+// background, but we stop waiting for it after `ms`.
+export function withTimeout(
+  promise: Promise<ConnectorResult>,
+  source: string,
+  ms: number
+): Promise<ConnectorResult> {
+  return new Promise<ConnectorResult>((resolve) => {
+    const timer = setTimeout(() => resolve(safeResult(source, `Timeout after ${ms}ms`)), ms);
+    promise.then(
+      (result) => { clearTimeout(timer); resolve(result); },
+      (err) => { clearTimeout(timer); resolve(safeResult(source, err)); }
+    );
+  });
+}

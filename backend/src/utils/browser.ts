@@ -18,18 +18,48 @@ function findChrome(): string {
   );
 }
 
-let browser: Browser | null = null;
+// Caches the in-flight launch promise, not just the resolved browser — if
+// several connectors call getBrowser() concurrently before the first launch
+// finishes, they all await the same promise instead of each launching their
+// own Chrome instance (previously: N concurrent callers → N separate
+// browsers, multiplying memory use by the concurrency limit).
+let browserPromise: Promise<Browser> | null = null;
 
 async function getBrowser(): Promise<Browser> {
-  if (browser && browser.connected) return browser;
+  if (browserPromise) {
+    const existing = await browserPromise;
+    if (existing.connected) return existing;
+    browserPromise = null;
+  }
+
   const executablePath = process.env.CHROME_PATH || findChrome();
-  browser = await puppeteer.launch({
-    executablePath,
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+  browserPromise = puppeteer
+    .launch({
+      executablePath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    })
+    .then((b) => {
+      b.on("disconnected", () => { browserPromise = null; });
+      return b;
+    });
+  return browserPromise;
+}
+
+// Plain HTTP fetch with browser-like headers — much cheaper than launching
+// Chrome, but only works against sites that don't require JS rendering or
+// bot-detection bypass.
+export async function plainFetchPage(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
   });
-  browser.on("disconnected", () => { browser = null; });
-  return browser;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
 }
 
 // Fetches a page using a real Chrome browser — bypasses bot detection and renders JS

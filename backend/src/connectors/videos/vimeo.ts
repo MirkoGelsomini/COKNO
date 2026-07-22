@@ -17,10 +17,10 @@ const vimeo: Connector = {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json() as any;
-      return {
-        source: "Vimeo",
-        total: data.total ?? 0,
-        items: (data.data ?? []).map((v: any) => ({
+      const terms = query.toLowerCase().split(/\s+/);
+
+      const items = (data.data ?? [])
+        .map((v: any) => ({
           id: v.uri,
           title: v.name ?? "Vimeo video",
           url: v.link,
@@ -29,8 +29,13 @@ const vimeo: Connector = {
           author: v.user?.name,
           source: "Vimeo",
           category: "videos",
-        })),
-      };
+        }))
+        .filter((item: any) => {
+          const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
+          return terms.some((t) => text.includes(t));
+        });
+
+      return { source: "Vimeo", total: items.length, items };
     } catch (err) {
       return safeResult("Vimeo", err);
     }

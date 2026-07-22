@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { scrapePage } from "../../utils/browser";
+import { plainFetchPage } from "../../utils/browser";
 import { Connector, ConnectorResult, safeResult } from "../types";
 
 const etymonline: Connector = {
@@ -10,7 +10,7 @@ const etymonline: Connector = {
   async search(query): Promise<ConnectorResult> {
     try {
       const url = `https://www.etymonline.com/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/word/']");
+      const html = await plainFetchPage(url);
       const $ = cheerio.load(html);
       const items: any[] = [];
 

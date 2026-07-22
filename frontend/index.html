@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cokno — Multi-source Search</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>Cokno</h1>
+    <p class="subtitle">Live multi-source search engine</p>
+
+    <form id="search-form">
+      <div class="search-bar">
+        <input type="text" id="query-input" placeholder="Search anything…" autocomplete="off" />
+        <label class="expand-toggle">
+          <input type="checkbox" id="expand-checkbox" />
+          <span>Expand query</span>
+        </label>
+        <button type="submit">Search</button>
+      </div>
+    </form>
+
+    <nav class="category-tabs">
+      <button class="tab active" data-category="">All</button>
+      <button class="tab" data-category="images">Images</button>
+      <button class="tab" data-category="videos">Videos</button>
+      <button class="tab" data-category="gifs">GIFs</button>
+      <button class="tab" data-category="models3d">3D Models</button>
+      <button class="tab" data-category="texts">Texts</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="meta-section" class="hidden">
+      <div id="query-info"></div>
+      <div id="source-badges"></div>
+      <div id="related-tags"></div>
+    </section>
+
+    <section id="results-section">
+      <div id="status-message"></div>
+      <div id="results-grid"></div>
+    </section>
+
+    <section id="graph-section">
+      <h2>Knowledge Graph</h2>
+      <p class="graph-hint">Click a node to see semantic relations and search by tag.</p>
+      <div id="graph-container">
+        <div id="graph-nodes"></div>
+        <div id="graph-detail" class="hidden">
+          <h3 id="graph-detail-title"></h3>
+          <ul id="graph-detail-relations"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
