@@ -17,7 +17,6 @@ const gifcities: Connector = {
       $("img").each((_, el) => {
         const src = $(el).attr("src") ?? "";
         const alt = $(el).attr("alt") || "";
-        // GifCities images come from archive.org/web
         if (src && (src.includes("archive.org") || src.includes("geocities"))) {
           items.push({
             id: src,

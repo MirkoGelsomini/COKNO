@@ -2,9 +2,6 @@ import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// Getty's thumbnails carry a generic localized alt text (e.g. German
-// "Video-Miniaturansicht"), not a real title — the actual description lives
-// in the URL slug, e.g. /detail/video/elephant-in-serengeti-stock-filmmaterial/123
 function titleFromSlug(href: string): string {
   const match = href.match(/\/detail\/video\/([^/]+)\/\d+/);
   if (!match) return "";
@@ -12,7 +9,6 @@ function titleFromSlug(href: string): string {
   return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : "";
 }
 
-// Getty Images Video — shows publicly visible previews (content requires license)
 const gettyVideos: Connector = {
   name: "Getty Videos",
   category: "videos",

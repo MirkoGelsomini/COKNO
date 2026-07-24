@@ -18,11 +18,7 @@ function findChrome(): string {
   );
 }
 
-// Caches the in-flight launch promise, not just the resolved browser — if
-// several connectors call getBrowser() concurrently before the first launch
-// finishes, they all await the same promise instead of each launching their
-// own Chrome instance (previously: N concurrent callers → N separate
-// browsers, multiplying memory use by the concurrency limit).
+// Caches the in-flight launch promise so concurrent callers share one Chrome instance
 let browserPromise: Promise<Browser> | null = null;
 
 async function getBrowser(): Promise<Browser> {
@@ -46,9 +42,7 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
-// Plain HTTP fetch with browser-like headers — much cheaper than launching
-// Chrome, but only works against sites that don't require JS rendering or
-// bot-detection bypass.
+// Cheap HTTP fetch with browser-like headers; only works on sites without JS rendering or bot-detection
 export async function plainFetchPage(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: {
@@ -69,7 +63,6 @@ export async function scrapePage(url: string, waitFor?: string): Promise<string>
   await page.setUserAgent(
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   );
-  // Block images/fonts to speed up loading
   await page.setRequestInterception(true);
   page.on("request", (req) => {
     const type = req.resourceType();

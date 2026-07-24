@@ -2,8 +2,6 @@ import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// Wifflegif's img alt is empty, but the URL slug is descriptive:
-// /gifs/112403-this-gets-more-funny-each-time-i-watch-gif
 function titleFromSlug(href: string): string {
   const match = href.match(/\/gifs\/\d+-(.+)$/);
   if (!match) return "";

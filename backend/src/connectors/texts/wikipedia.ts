@@ -1,6 +1,5 @@
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// Wikipedia API — no key required
 const wikipedia: Connector = {
   name: "Wikipedia",
   category: "texts",

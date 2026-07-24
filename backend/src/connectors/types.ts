@@ -34,9 +34,7 @@ export function safeResult(source: string, err: unknown): ConnectorResult {
   return { items: [], total: 0, source, error: message };
 }
 
-// Bounds a connector call so one slow/dead source can't hold up the whole
-// aggregated search response — the underlying call keeps running in the
-// background, but we stop waiting for it after `ms`.
+// Bounds a connector call so a slow source can't hold up the whole response
 export function withTimeout(
   promise: Promise<ConnectorResult>,
   source: string,

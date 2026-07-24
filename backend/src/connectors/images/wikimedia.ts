@@ -1,6 +1,5 @@
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// Wikimedia Commons — free media API, no key required
 const wikimedia: Connector = {
   name: "Wikimedia",
   category: "images",

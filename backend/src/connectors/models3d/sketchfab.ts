@@ -1,6 +1,5 @@
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// Sketchfab public API — no key required for basic search
 const sketchfab: Connector = {
   name: "Sketchfab",
   category: "models3d",

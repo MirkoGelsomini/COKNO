@@ -18,7 +18,6 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "Cokno API", version: "1.0.0" });
 });
 
-// Serve frontend static files
 const frontendPath = path.join(__dirname, "..", "..", "frontend");
 app.use(express.static(frontendPath));
 

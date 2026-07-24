@@ -19,7 +19,6 @@ const gifer: Connector = {
         const img = $(el).find("img").first();
         const src = img.attr("src") || img.attr("data-src") || "";
         const alt = img.attr("alt") || "";
-        // Skip navigation/header links (no image)
         if (href && src && src.includes("gifer")) {
           items.push({
             id: href,

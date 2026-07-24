@@ -1,6 +1,5 @@
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// Openverse (WordPress.org) — free open media API, no key required
 const openverse: Connector = {
   name: "Openverse",
   category: "images",

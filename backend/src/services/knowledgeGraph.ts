@@ -173,8 +173,7 @@ async function fetchConceptNetRelations(term: string): Promise<Relation[]> {
   }
 }
 
-// Curated graph first (guaranteed quality for the hand-tuned photography
-// domain terms), live ConceptNet lookup for everything else.
+// Curated graph first, live ConceptNet lookup for terms outside it
 async function getRelations(term: string): Promise<Relation[]> {
   const node = graph[term];
   if (node) return node.relations;

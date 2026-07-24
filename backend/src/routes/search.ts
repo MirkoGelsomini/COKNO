@@ -7,12 +7,10 @@ const router = Router();
 
 const VALID_CATEGORIES: Category[] = ["images", "videos", "gifs", "models3d", "texts"];
 
-// Per-connector cutoff — bounds the worst case response time regardless of
-// how many of the ~100 connectors are slow or unresponsive.
+// Per-connector cutoff, bounds worst-case response time
 const CONNECTOR_TIMEOUT_MS = Number(process.env.CONNECTOR_TIMEOUT_MS) || 8000;
 
-// In-memory result cache (no persistent storage — just RAM, cleared on
-// restart) so repeated identical searches skip the full connector fan-out.
+// In-memory cache (no persistence) so repeated searches skip the connector fan-out
 const CACHE_TTL_MS = Number(process.env.SEARCH_CACHE_TTL_MS) || 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 200;
 const cache = new Map<string, { body: unknown; expiresAt: number }>();

@@ -1,6 +1,5 @@
 import { Connector, Category } from "./types";
 
-// Images
 import unsplash from "./images/unsplash";
 import pexels from "./images/pexels";
 import pixabay from "./images/pixabay";
@@ -22,7 +21,6 @@ import freeimages from "./images/freeimages";
 import freepik from "./images/freepik";
 import behance from "./images/behance";
 
-// Videos
 import youtube from "./videos/youtube";
 import vimeo from "./videos/vimeo";
 import mixkit from "./videos/mixkit";
@@ -44,7 +42,6 @@ import bbc from "./videos/bbc";
 import crashcourse from "./videos/crashcourse";
 import gettyVideos from "./videos/getty_videos";
 
-// GIFs
 import giphy from "./gifs/giphy";
 import tenor from "./gifs/tenor";
 import gifer from "./gifs/gifer";
@@ -65,7 +62,6 @@ import dribbble from "./gifs/dribbble";
 import lottiefiles from "./gifs/lottiefiles";
 import motionelements from "./gifs/motionelements";
 
-// 3D Models
 import sketchfab from "./models3d/sketchfab";
 import thingiverse from "./models3d/thingiverse";
 import free3d from "./models3d/free3d";
@@ -87,7 +83,6 @@ import pinshape from "./models3d/pinshape";
 import youmagine from "./models3d/youmagine";
 import nih3d from "./models3d/nih3d";
 
-// Texts
 import wikipedia from "./texts/wikipedia";
 import openalex from "./texts/openalex";
 import etymonline from "./texts/etymonline";
@@ -110,39 +105,36 @@ import base from "./texts/base";
 import doab from "./texts/doab";
 
 const all: Connector[] = [
-  // Images (20)
   unsplash, pexels, pixabay, openverse, wikimedia, morguefile, stocksnap,
   nasa, loc, met, artstation, flickr, europeana, smithsonian, dpla,
   deviantart, burst, freeimages, freepik, behance,
 
-  // Videos (20)
   youtube, vimeo, mixkit, coverr,
   pexelsVideos, pixabayVideos, wikimediaVideos, ted, videvo, pbs, khanacademy, mitocw,
   rumble, reuters, coursera, pond5, academicearth, bbc, crashcourse, gettyVideos,
 
-  // GIFs (19)
   giphy, tenor, gifer, gifcities, imgur, reddit, pixabayGifs,
   imgflip, wifflegif, gifsec, gifimage, gifgifs,
   tumblr, reactiongifs, animatedimages, makeagif, dribbble, lottiefiles, motionelements,
 
-  // 3D Models (20)
   sketchfab, thingiverse, free3d, archive3d,
   polyhaven, myminifactory, cults3d, printables, grabcad, makerworld,
   stlfinder, yobi3d, turbosquid, cgtrader, thangs,
   warehouse3d, blenderswap, pinshape, youmagine, nih3d,
 
-  // Texts (20)
   wikipedia, openalex, etymonline, treccani,
   conceptnet, gutenberg, internetarchive, arxiv, pubmed, semanticscholar,
   openlibrary, wikisource, simplewiki, doaj, merriamwebster, core,
   cambridge, stanfordPhilosophy, base, doab,
 ];
 
+// Returns all connectors, or only those in the given category
 export function getConnectors(category?: Category): Connector[] {
   if (!category) return all;
   return all.filter((c) => c.category === category);
 }
 
+// Groups connector names and types by category, for the /sources endpoint
 export function listSources(): Record<Category, { name: string; type: string }[]> {
   const result: any = {};
   for (const c of all) {

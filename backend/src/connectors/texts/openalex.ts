@@ -1,6 +1,5 @@
 import { Connector, ConnectorResult, safeResult } from "../types";
 
-// OpenAlex — open academic paper index, no key required
 const openalex: Connector = {
   name: "OpenAlex",
   category: "texts",

@@ -1,5 +1,3 @@
-// Unsplash API integration — live search, no local storage
-
 export interface UnsplashPhoto {
   id: string;
   description: string | null;
@@ -27,6 +25,7 @@ export interface UnsplashSearchResult {
 
 const BASE_URL = "https://api.unsplash.com";
 
+// Searches Unsplash directly (live, no local storage)
 export async function searchPhotos(
   query: string,
   page = 1,
