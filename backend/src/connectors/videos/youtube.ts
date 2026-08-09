@@ -5,14 +5,14 @@ const youtube: Connector = {
   category: "videos",
   type: "api",
 
-  async search(query, page = 1): Promise<ConnectorResult> {
+  async search(query, page = 1, safe = true): Promise<ConnectorResult> {
     const key = process.env.YOUTUBE_API_KEY;
     if (!key) return safeResult("YouTube", "YOUTUBE_API_KEY not set");
 
     try {
       const url =
         `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}` +
-        `&maxResults=12&type=video&key=${key}&safeSearch=strict`;
+        `&maxResults=12&type=video&key=${key}&safeSearch=${safe ? "strict" : "none"}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

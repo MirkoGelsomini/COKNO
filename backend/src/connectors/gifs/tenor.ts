@@ -5,13 +5,13 @@ const tenor: Connector = {
   category: "gifs",
   type: "api",
 
-  async search(query, page = 1): Promise<ConnectorResult> {
+  async search(query, page = 1, safe = true): Promise<ConnectorResult> {
     const key = process.env.TENOR_API_KEY;
     if (!key) return safeResult("Tenor", "TENOR_API_KEY not set");
 
     try {
       const pos = (page - 1) * 12;
-      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${key}&limit=12&pos=${pos}&contentfilter=high`;
+      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${key}&limit=12&pos=${pos}&contentfilter=${safe ? "high" : "off"}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

@@ -5,12 +5,12 @@ const pixabayVideos: Connector = {
   category: "videos",
   type: "api",
 
-  async search(query, page = 1): Promise<ConnectorResult> {
+  async search(query, page = 1, safe = true): Promise<ConnectorResult> {
     const key = process.env.PIXABAY_API_KEY;
     if (!key) return safeResult("Pixabay Videos", "PIXABAY_API_KEY not set");
 
     try {
-      const url = `https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(query)}&per_page=12&page=${page}&safesearch=true`;
+      const url = `https://pixabay.com/api/videos/?key=${key}&q=${encodeURIComponent(query)}&per_page=12&page=${page}&safesearch=${safe}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

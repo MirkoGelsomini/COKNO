@@ -5,13 +5,13 @@ const giphy: Connector = {
   category: "gifs",
   type: "api",
 
-  async search(query, page = 1): Promise<ConnectorResult> {
+  async search(query, page = 1, safe = true): Promise<ConnectorResult> {
     const key = process.env.GIPHY_API_KEY;
     if (!key) return safeResult("Giphy", "GIPHY_API_KEY not set");
 
     try {
       const offset = (page - 1) * 12;
-      const url = `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(query)}&limit=12&offset=${offset}&rating=g`;
+      const url = `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(query)}&limit=12&offset=${offset}&rating=${safe ? "g" : "r"}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

@@ -23,7 +23,7 @@ export interface Connector {
   name: string;
   category: Category;
   type: "api" | "scraping";
-  search(query: string, page?: number): Promise<ConnectorResult>;
+  search(query: string, page?: number, safe?: boolean): Promise<ConnectorResult>;
 }
 
 export const USER_AGENT =
