@@ -11,19 +11,11 @@ const router = Router();
 
 const VALID_CATEGORIES: Category[] = ["images", "videos", "gifs", "models3d", "texts"];
 
-// Some connectors (confirmed: Pexels, Freepik, The Met) never return "zero results" for a
-// query with no real matches — they silently substitute generic/trending content instead.
-// There's no explicit flag for this in their responses, but the substituted batches share a
-// tell: not a single item has any textual connection to the query anywhere. A genuine batch,
-// even from a connector doing loose semantic matching, almost always has at least one item
-// that does (verified: searching "bank" on Unsplash gives 2/12 literal matches even though
-// most captions are unrelated-sounding; a nonsense query gives 0/12 on the affected sources).
-// Checking for that rather than naming specific connectors means this keeps working
-// automatically for any source added later, without needing to be told which ones do this.
-// Uses the same stemmed match as the definitions filter (not exact substring) since some
-// connectors only look up a query's first word and return results keyed to its base form
-// (e.g. "eating" -> Cambridge Dictionary's "eat") — an early, stricter version of this check
-// mistook that for zero relevance and dropped an entire legitimate source.
+// Some connectors (Pexels, Freepik, The Met) substitute generic/trending content instead of
+// returning zero results for a nonsense query. Detected generically — zero items in the batch
+// share any word-stem with the query — rather than by naming specific sources, so it keeps
+// working for connectors added later. Stemmed, not exact match, since some connectors key
+// results to a query's base form (e.g. "eating" -> Cambridge Dictionary's "eat").
 function batchHasNoRelevance(items: SearchItem[], query: string): boolean {
   if (items.length === 0) return false;
   return !items.some((item) => {
@@ -32,11 +24,10 @@ function batchHasNoRelevance(items: SearchItem[], query: string): boolean {
   });
 }
 
-// Per-connector cutoff, bounds worst-case response time. 20s covers a scraping connector's
-// own worst case (15s page load + 5s selector wait) even when it has to queue for a Chrome tab.
+// Covers a scraping connector's worst case even when queued for a Chrome tab
 const CONNECTOR_TIMEOUT_MS = Number(process.env.CONNECTOR_TIMEOUT_MS) || 20000;
 
-// In-memory cache (no persistence) so repeated searches skip the connector fan-out
+// In-memory only, no persistence
 const CACHE_TTL_MS = Number(process.env.SEARCH_CACHE_TTL_MS) || 10 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 200;
 const cache = new Map<string, { body: unknown; expiresAt: number }>();
@@ -53,7 +44,7 @@ function getCached(key: string): unknown {
     return undefined;
   }
   cache.delete(key);
-  cache.set(key, entry); // bump recency for LRU-style eviction
+  cache.set(key, entry); // bump recency for LRU eviction
   return entry.body;
 }
 
@@ -80,8 +71,7 @@ router.get("/search", async (req: Request, res: Response) => {
   const safeMode = safe !== "false";
   const pageNum = parseInt(page as string);
 
-  // Explicit queries are refused outright in safe mode, rather than fanning out to every
-  // connector and relying on filtering the results after the fact.
+  // Blocked queries are refused outright, not fanned out and filtered after the fact
   if (safeMode && isQueryBlocked(q)) {
     return res.json({
       query: q,
@@ -121,12 +111,8 @@ router.get("/search", async (req: Request, res: Response) => {
   }
 
   const connectors = getConnectors(cat);
+  const spellingSuggestion = suggestCorrection(q); // sync, never alters the actual search
 
-  // Cheap and synchronous (no network) — a "did you mean" hint the frontend can offer
-  // alongside the results, never used to alter the search itself.
-  const spellingSuggestion = suggestCorrection(q);
-
-  // Run in parallel: a slow/unreachable ConceptNet must never delay the actual search results
   const [relatedTags, settled] = await Promise.all([
     getRelatedTags(q),
     Promise.allSettled(
@@ -160,9 +146,7 @@ router.get("/search", async (req: Request, res: Response) => {
   const items = allItems.filter((i) => !DICTIONARY_SOURCES.has(i.source));
   const errors = sources.filter((s) => s.error).map((s) => ({ source: s.source, error: s.error }));
 
-  // "Available" = the connector actually ran (no missing key / timeout / HTTP error).
-  // Scoring coverage against only those isolates real content signal from our own
-  // infrastructure reliability — a missing API key shouldn't read as "less knowledge".
+  // "Available" = ran without error — a missing API key shouldn't read as "less knowledge"
   const sourcesAvailable = sources.filter((s) => !s.error).length;
   const sourcesWithResults = sources.filter((s) => !s.error && s.items.length > 0).length;
   const categories = Array.from(new Set(allItems.map((i) => i.category)));
@@ -186,12 +170,10 @@ router.get("/search", async (req: Request, res: Response) => {
         sourcesQueried: connectors.length,
         sourcesAvailable,
         sourcesWithResults,
-        // Content signal: of the sources that actually responded, how many found something
-        coveragePercent: sourcesAvailable
+        coveragePercent: sourcesAvailable // of responding sources, how many found something
           ? Math.round((sourcesWithResults / sourcesAvailable) * 100)
           : 0,
-        // Infrastructure signal: how many sources were configured & reachable at all
-        availabilityPercent: connectors.length
+        availabilityPercent: connectors.length // how many were configured & reachable at all
           ? Math.round((sourcesAvailable / connectors.length) * 100)
           : 0,
         categories,
@@ -221,13 +203,8 @@ router.get("/graph/expand", async (req: Request, res: Response) => {
   return res.json({ tag, expandedTerms, relatedTags });
 });
 
-// GET /api/concept?tag=apple+tree&safe=true
-// Synthesis view for a single concept (usually a graph node the user clicked): a
-// definition looked up directly against the dictionary connectors (independent of
-// whatever category the current search happened to run), plus its own related concepts.
-// Kept as a separate, opt-in endpoint rather than folded into /graph/expand so that just
-// browsing the graph (which already calls /graph/expand on every node click) doesn't pay
-// the cost of the scraping-based dictionary connectors unless the user actually asks for it.
+// GET /api/concept?tag=apple+tree&safe=true — definition + related concepts for one graph
+// node. Separate from /graph/expand so ordinary node clicks don't pay for dictionary scraping.
 router.get("/concept", async (req: Request, res: Response) => {
   const { tag, safe = "true" } = req.query;
   if (!tag || typeof tag !== "string") {

@@ -532,8 +532,15 @@ main {
 #graph-canvas {
   position: relative;
   width: 100%;
-  height: 320px; /* fallback before JS sizes it to fit the current graph's labels */
-  overflow: visible;
+  height: 320px; /* fallback before JS sizes it */
+  overflow-x: auto; /* scroll viewport; #graph-inner grows wider on expansion */
+  overflow-y: visible;
+}
+
+#graph-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 #graph-edges {
@@ -651,6 +658,20 @@ main {
   font-weight: 600;
   cursor: pointer;
 }
+
+.graph-detail-expand {
+  padding: 0.3rem 0.75rem;
+  background: transparent;
+  color: #ccc;
+  border: 1px solid #333;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.graph-detail-expand:hover:not(:disabled) { background: #1e1e1e; }
+.graph-detail-expand:disabled { opacity: 0.4; cursor: not-allowed; }
+.graph-detail-expand.expanded { color: #c97e7e; border-color: #5a3a3a; }
 
 .graph-detail-relations {
   display: flex;

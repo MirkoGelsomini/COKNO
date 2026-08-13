@@ -1,9 +1,7 @@
 import { SearchItem } from "../connectors/types";
 import { BLOCKED_TERMS } from "../data/blockedTerms";
 
-// Word-boundary matching for plain alphanumeric terms avoids false positives like
-// "ass" flagging "classic" or "assassin"; terms with punctuation (e.g. "s&m", "g-spot")
-// fall back to a plain substring match since \b doesn't apply cleanly to them.
+// Word-boundary match avoids false positives like "ass" in "classic"; punctuated terms fall back to substring
 const WORDY = /^[\w\s]+$/;
 
 function escapeRegExp(term: string): string {
@@ -18,8 +16,6 @@ const BLOCKED_PATTERN = new RegExp(
   "i"
 );
 
-// Used to refuse the search outright when the query itself is explicit, rather than
-// silently letting every connector run and filtering results after the fact.
 export function isQueryBlocked(query: string): boolean {
   return BLOCKED_PATTERN.test(query);
 }

@@ -5,17 +5,13 @@ import cambridge from "../connectors/texts/cambridge";
 import etymonline from "../connectors/texts/etymonline";
 import treccani from "../connectors/texts/treccani";
 
-// Connectors that return a short authoritative definition rather than a general
-// article/media result. Pulled out of the grid so they can be shown as a dedicated
-// "Definizione" box instead of being just another card among dozens.
+// Shown as a dedicated "Definizione" box instead of as regular grid cards
 export const DICTIONARY_SOURCES = new Set(["Merriam-Webster", "Cambridge Dictionary", "Etymonline", "Treccani"]);
 
 const DICTIONARY_CONNECTORS = [merriamwebster, cambridge, etymonline, treccani];
 const CONNECTOR_TIMEOUT_MS = Number(process.env.CONNECTOR_TIMEOUT_MS) || 20000;
 
-// Round-robins across sources before capping, so a single source that returns lots of
-// entries (e.g. Etymonline) can't crowd out the others (e.g. Cambridge Dictionary) —
-// same fix as applied to graph relations, same reason: fair mix beats raw array order.
+// Round-robins across sources before capping, so one prolific source can't crowd out the rest
 export function interleaveBySource(items: SearchItem[], cap: number): SearchItem[] {
   const bySource = new Map<string, SearchItem[]>();
   for (const item of items) {
@@ -38,22 +34,16 @@ export function interleaveBySource(items: SearchItem[], cap: number): SearchItem
   return result;
 }
 
-// Etymonline and Treccani run their own whole-site search for a query rather than a strict
-// headword lookup (see those connectors' own comments), so for a multi-word query they can
-// surface an entry for a completely different word whose etymology write-up merely mentions
-// one of the query's words in passing — e.g. searching "eating apple" surfaces Etymonline's
-// "melon" and "Pomona" entries, since both happen to reference "apple" while defining
-// something else entirely. A definition should define one of the words you searched, not
-// just reference it, so require the entry's own title (not its body text) to relate to the
-// query.
+// Etymonline/Treccani run whole-site search, so a multi-word query can surface an entry that
+// only mentions a word in passing (e.g. "eating apple" -> "melon"). Require the entry's own
+// title, not just its body, to relate to the query.
 export function isTitleRelevant(title: string, query: string): boolean {
   return textRelatesToQuery(title, query);
 }
 
-// Looks up a single term directly against only the dictionary connectors. Used both to
-// pull definitions out of a full search's results (search.ts, no extra network calls
-// since those connectors already ran) and standalone for the concept page, which needs a
-// definition even when the current search never touched the texts category at all.
+// Looks up a term directly against the dictionary connectors — used both to pull definitions
+// out of a full search and standalone for the concept page (which may need one even when the
+// current search never touched texts).
 export async function fetchDefinitionsFor(term: string, safe: boolean, cap = 6): Promise<SearchItem[]> {
   const results = await Promise.all(
     DICTIONARY_CONNECTORS.map((c) => withTimeout(c.search(term, 1, safe), c.name, CONNECTOR_TIMEOUT_MS))

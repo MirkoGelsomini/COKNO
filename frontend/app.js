@@ -14,6 +14,10 @@ let expandCache = {}; // tag -> {expandedTerms, relatedTags} from /graph/expand
 let pendingNavigation = null; // {from, relation} set right before a graph-driven search
 let activeFilter = null; // {ids: Set<string>, label} when a graph node is narrowing the results list
 
+let graphState = null; // { rootId, rootQuery, selectedId, nodesById: Map<id, node> }
+const EXPAND_CHILD_CAP = 6; // new nodes added per "Espandi nel grafo" click
+const GRAPH_NODE_CAP = 40; // total nodes across all levels before further expansion is blocked
+
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
@@ -49,7 +53,6 @@ safeCheckbox.addEventListener("change", () => {
   if (currentQuery) runSearch();
 });
 
-// Runs a search against the API and renders meta info + results
 async function runSearch() {
   setStatus("Searching across sources…");
   clearResults();
@@ -87,9 +90,7 @@ async function runSearch() {
       setStatus(data.items.length === 0 ? "No results found." : "");
     }
 
-    // Only a fresh page-1 search advances the trail — paging back and forth
-    // through the same query shouldn't spam the session's knowledge path.
-    // A blocked query never actually ran, so it doesn't belong in the trail.
+    // Only a fresh page-1, non-blocked search advances the trail
     if (currentPage === 1 && !data.blockedQuery) {
       renderTrail(appendToTrail(data.query, data.totalItems, nav));
     }
@@ -98,11 +99,7 @@ async function runSearch() {
   }
 }
 
-// --- Knowledge Trail ---
-// A locally-persisted record of every distinct query explored in this browser,
-// with a link back to whichever query/relation led here (if reached via the graph
-// rather than typed fresh). This is what survives across searches and page reloads,
-// unlike the per-query Knowledge Map above which resets every time.
+// --- Knowledge Trail --- localStorage-persisted, survives searches/reloads unlike the graph below
 const TRAIL_KEY = "coknoTrail";
 const TRAIL_MAX = 30;
 
@@ -169,10 +166,7 @@ document.getElementById("trail-clear").addEventListener("click", () => {
   renderTrail([]);
 });
 
-// Renders exactly PAGE_SIZE cards from the already-fetched pool, so clicking through
-// pages feels uniform instead of jumping by however many items the sources happened
-// to return. Only once the pool itself is exhausted does "next" reach out to the
-// backend for each connector's own next batch.
+// Slices PAGE_SIZE cards from the fetched pool; only exhausting the pool fetches a new backend page
 function renderResultsSlice() {
   const start = subPage * PAGE_SIZE;
   const slice = resultPool.slice(start, start + PAGE_SIZE);
@@ -239,9 +233,7 @@ function renderMeta(data) {
   if (data.expandedQuery) info += ` → expanded: <strong>"${data.expandedQuery}"</strong>`;
   document.getElementById("query-info").innerHTML = info;
 
-  // Collapsed by default behind a <details> — with up to ~99 sources for "All", the full
-  // badge list ate a lot of vertical space before the user ever saw a result.
-  const sources = data.sources ?? [];
+  const sources = data.sources ?? []; // collapsed behind a <details>, up to 99 sources for "All"
   const withResults = sources.filter((s) => !s.error && s.count > 0).length;
   document.getElementById("source-summary").textContent =
     `${withResults}/${sources.length} fonti con risultati ▾`;
@@ -274,8 +266,7 @@ function renderMeta(data) {
   }
 }
 
-// Shared markup for a definition entry — used both by the top-of-page "Definizione" box
-// and by the concept page modal, so the two don't drift into inconsistent layouts.
+// Shared with the concept modal so the two don't drift into inconsistent layouts
 function definitionCardsHtml(definitions) {
   return definitions.map((d) => `
     <div class="definition-card">
@@ -287,8 +278,6 @@ function definitionCardsHtml(definitions) {
   `).join("");
 }
 
-// Purely an optional hint — never changes what was actually searched. Clicking it just
-// re-runs the search with the corrected spelling, same as clicking any other suggested term.
 function renderSpellingSuggestion(suggestion) {
   const el = document.getElementById("spelling-suggestion");
   if (!suggestion) {
@@ -301,9 +290,6 @@ function renderSpellingSuggestion(suggestion) {
   el.querySelector(".spelling-suggestion-btn").addEventListener("click", () => searchTag(suggestion));
 }
 
-// Surfaces dictionary/etymology results (Merriam-Webster, Cambridge, Etymonline, Treccani)
-// as a dedicated box instead of leaving them as just another card lost in the grid —
-// this is the fast, authoritative answer to "what does this mean", shown before anything else.
 function renderDefinitions(definitions) {
   const section = document.getElementById("definitions-section");
   const list = document.getElementById("definitions-list");
@@ -318,8 +304,7 @@ function renderDefinitions(definitions) {
   list.innerHTML = definitionCardsHtml(definitions);
 }
 
-// Sets the query box to a tag and re-runs the search. When reached via a graph node
-// or related-tag chip, fromQuery/relation record that link for the knowledge trail.
+// fromQuery/relation record the trail link when reached via a graph node or tag chip
 function searchTag(tag, fromQuery, relation) {
   document.getElementById("query-input").value = tag;
   currentQuery = tag;
@@ -331,12 +316,33 @@ function searchTag(tag, fromQuery, relation) {
 }
 
 // --- Knowledge Map ---
-// Renders a query-centered graph (root = current query, branches = live ConceptNet
-// relations) plus a "grado di conoscenza" coverage indicator for this search.
+// Mirrors backend/textRelevance.ts, so nodes added by expanding a branch can compute their
+// own match count against resultPool client-side, the same way the server does.
+function sameStemJS(a, b) {
+  const n = Math.min(a.length, b.length, 4);
+  return n >= 3 && a.slice(0, n) === b.slice(0, n);
+}
+function wordsJS(text) {
+  return (text ?? "").toLowerCase().split(/[^a-zà-ÿ]+/).filter((w) => w.length > 2);
+}
+function textRelatesToQueryJS(text, query) {
+  const textWords = wordsJS(text);
+  const queryWords = wordsJS(query);
+  return textWords.some((tw) => queryWords.some((qw) => sameStemJS(tw, qw)));
+}
+function itemsMatchingTagJS(items, tag) {
+  const needle = tag.toLowerCase();
+  return items.filter((item) => {
+    if (item.tags?.some((t) => t.toLowerCase() === needle)) return true;
+    const haystack = `${item.title} ${item.description ?? ""}`;
+    return textRelatesToQueryJS(haystack, tag);
+  });
+}
+
+// Entry point for a new search result: rebuilds graphState from scratch, discarding any
+// branches expanded on a previous query
 function renderGraph(graph, query) {
   const section = document.getElementById("graph-section");
-  const canvas = document.getElementById("graph-canvas");
-  const edgesSvg = document.getElementById("graph-edges");
   const coverageBadge = document.getElementById("coverage-badge");
   const detail = document.getElementById("graph-detail");
 
@@ -346,15 +352,13 @@ function renderGraph(graph, query) {
 
   if (!graph || !graph.nodes?.length) {
     section.classList.add("hidden");
+    graphState = null;
     return;
   }
   section.classList.remove("hidden");
 
-  // Two separate signals, shown separately on purpose: coveragePercent is a content
-  // signal (of the sources that actually responded, how many found something), while
-  // availabilityPercent is an infrastructure signal (how many were even configured/
-  // reachable). Folding them into one number would hide missing API keys and timeouts
-  // behind what looks like "this topic isn't well documented".
+  // coveragePercent = content signal; availabilityPercent = infrastructure signal — kept
+  // separate so a missing API key doesn't read as "topic isn't well documented"
   const { coveragePercent, sourcesWithResults, sourcesAvailable, sourcesQueried, availabilityPercent, categories } = graph.coverage;
   coverageBadge.innerHTML = `
     <span class="coverage-label">Grado di conoscenza</span>
@@ -363,52 +367,134 @@ function renderGraph(graph, query) {
     <span class="coverage-availability" title="Fonti configurate e raggiungibili in questa ricerca, a prescindere dal contenuto trovato">${sourcesAvailable}/${sourcesQueried} fonti raggiungibili (${availabilityPercent}%)</span>
   `;
 
-  canvas.querySelectorAll(".graph-node").forEach((n) => n.remove());
+  const rootData = graph.nodes.find((n) => n.relation === "root");
+  const relatedData = graph.nodes.filter((n) => n.relation !== "root");
+
+  const nodesById = new Map();
+  nodesById.set(rootData.id, {
+    id: rootData.id, label: rootData.label, relation: "root",
+    matchCount: rootData.matchCount, matchedIds: rootData.matchedIds ?? [], frequency: rootData.frequency,
+    parentId: null, depth: 0, expanded: true, children: relatedData.map((n) => n.id),
+  });
+  relatedData.forEach((n) => {
+    nodesById.set(n.id, {
+      id: n.id, label: n.label, relation: n.relation,
+      matchCount: n.matchCount, matchedIds: n.matchedIds ?? [], frequency: n.frequency,
+      parentId: rootData.id, depth: 1, expanded: false, children: [],
+    });
+  });
+
+  graphState = { rootId: rootData.id, rootQuery: query, selectedId: null, nodesById };
+  renderGraphDOM();
+}
+
+// Rebuilds the layout; each node's sector splits by a "pixel budget" weight so an
+// expanded branch grows its own share instead of squeezing its siblings.
+function renderGraphDOM() {
+  const canvas = document.getElementById("graph-canvas"); // fixed-width scroll viewport
+  const inner = document.getElementById("graph-inner"); // resized to the graph's real extent
+  const edgesSvg = document.getElementById("graph-edges");
+  inner.querySelectorAll(".graph-node").forEach((n) => n.remove());
   edgesSvg.innerHTML = "";
 
-  const root = graph.nodes.find((n) => n.relation === "root");
-  const related = graph.nodes.filter((n) => n.relation !== "root");
+  if (!graphState) return;
+  const root = graphState.nodesById.get(graphState.rootId);
+  if (!root) return;
 
-  // A fixed radius made long or numerous labels overlap, since it never accounted for how
-  // wide the chips actually render. Estimate each chip's pixel width from its label (plus
-  // the match-count badge, when present) and grow the ring so its circumference comfortably
-  // fits all of them — short graphs stay compact, long/crowded ones spread out automatically.
   const estimateNodeWidth = (node) => {
     const countWidth = node.matchCount > 0 ? 30 : 0;
     const freqWidth = node.frequency != null ? 34 : 0;
     return 34 + node.label.length * 7.2 + countWidth + freqWidth;
   };
 
-  const width = canvas.clientWidth || 600;
   const GAP = 16;
-  const totalArc = related.reduce((sum, n) => sum + estimateNodeWidth(n) + GAP, 0);
+  const nodeWeight = (node) => {
+    const own = estimateNodeWidth(node) + GAP;
+    if (!node.children.length) return own;
+    const childrenTotal = node.children.reduce((sum, id) => {
+      const c = graphState.nodesById.get(id);
+      return sum + (c ? nodeWeight(c) : 0);
+    }, 0);
+    return Math.max(own, childrenTotal);
+  };
+
+  const width = canvas.clientWidth || 600;
+  const MIN_STEP = 100; // never sit closer than this to the parent ring
   const minRadius = 130;
-  const maxRadius = Math.max(minRadius, width / 2 - 40); // keep chips from running off narrow viewports
-  const radius = Math.min(Math.max(minRadius, totalArc / (2 * Math.PI)), maxRadius);
-  const canvasHeight = Math.round(radius * 2 + 90);
 
-  canvas.style.height = `${canvasHeight}px`;
-  edgesSvg.setAttribute("width", width);
-  edgesSvg.setAttribute("height", canvasHeight);
-  const centerX = width / 2;
-  const centerY = canvasHeight / 2;
+  // Coordinates relative to root at (0,0), radius never capped mid-layout — the canvas is
+  // sized to the tree's actual extent afterward instead (see below), so nodes never compress
+  root.angleStart = 0;
+  root.angleEnd = 2 * Math.PI;
+  root.radius = 0;
+  root.relX = 0;
+  root.relY = 0;
 
-  canvas.appendChild(makeGraphNode(root, centerX, centerY, query));
+  (function layout(node) {
+    const kids = node.children.map((id) => graphState.nodesById.get(id)).filter(Boolean);
+    if (!kids.length) return;
 
-  related.forEach((node, i) => {
-    const angle = (i / Math.max(related.length, 1)) * 2 * Math.PI - Math.PI / 2;
-    const x = centerX + radius * Math.cos(angle);
-    const y = centerY + radius * Math.sin(angle);
+    const span = node.angleEnd - node.angleStart;
+    const weights = kids.map(nodeWeight);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const rawStep = totalWeight / Math.max(span, 0.001);
+    const step = node.depth === 0 ? Math.max(minRadius, rawStep) : Math.max(MIN_STEP, rawStep);
+    const childRadius = node.radius + step;
 
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", centerX);
-    line.setAttribute("y1", centerY);
-    line.setAttribute("x2", x);
-    line.setAttribute("y2", y);
-    line.setAttribute("class", `graph-edge rel-${node.relation}`);
-    edgesSvg.appendChild(line);
+    let cursor = node.angleStart;
+    kids.forEach((child, i) => {
+      const w = weights[i] / totalWeight;
+      child.angleStart = cursor;
+      child.angleEnd = cursor + span * w;
+      cursor = child.angleEnd;
+      child.angle = (child.angleStart + child.angleEnd) / 2 - Math.PI / 2; // start at 12 o'clock
+      child.radius = childRadius;
+      child.relX = childRadius * Math.cos(child.angle);
+      child.relY = childRadius * Math.sin(child.angle);
+      layout(child);
+    });
+  })(root);
 
-    canvas.appendChild(makeGraphNode(node, x, y, query));
+  const all = [];
+  (function collect(node) {
+    all.push(node);
+    node.children.forEach((id) => { const c = graphState.nodesById.get(id); if (c) collect(c); });
+  })(root);
+
+  // #graph-inner grows to the tree's natural extent; #graph-canvas scrolls horizontally
+  // when that exceeds its own fixed width (see CSS)
+  const maxAbsX = Math.max(width / 2 - 40, ...all.map((n) => Math.abs(n.relX)));
+  const maxAbsY = Math.max(minRadius, ...all.map((n) => Math.abs(n.relY)));
+  const innerWidth = Math.round(maxAbsX * 2 + 80);
+  const innerHeight = Math.round(maxAbsY * 2 + 90);
+
+  canvas.style.height = `${innerHeight}px`;
+  inner.style.width = `${innerWidth}px`;
+  inner.style.height = `${innerHeight}px`;
+  edgesSvg.setAttribute("width", innerWidth);
+  edgesSvg.setAttribute("height", innerHeight);
+  const centerX = innerWidth / 2;
+  const centerY = innerHeight / 2;
+
+  all.forEach((node) => {
+    node.x = centerX + node.relX;
+    node.y = centerY + node.relY;
+  });
+
+  canvas.scrollLeft = Math.max(0, centerX - canvas.clientWidth / 2); // center on root
+
+  all.forEach((node) => {
+    if (node.parentId) {
+      const parent = graphState.nodesById.get(node.parentId);
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", parent.x);
+      line.setAttribute("y1", parent.y);
+      line.setAttribute("x2", node.x);
+      line.setAttribute("y2", node.y);
+      line.setAttribute("class", `graph-edge rel-${node.relation}`);
+      edgesSvg.appendChild(line);
+    }
+    inner.appendChild(makeGraphNode(node, node.x, node.y, graphState.rootQuery));
   });
 }
 
@@ -416,6 +502,7 @@ function makeGraphNode(node, x, y, rootQuery) {
   const el = document.createElement("button");
   el.className = `graph-node rel-${node.relation}`;
   if (node.relation !== "root" && node.matchCount === 0) el.classList.add("no-match");
+  if (graphState.selectedId === node.id) el.classList.add("selected");
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   const freqBadge = node.frequency != null ? ` <span class="node-freq">${node.frequency}%</span>` : "";
@@ -431,13 +518,15 @@ function makeGraphNode(node, x, y, rootQuery) {
     el.classList.add("root");
   } else {
     el.addEventListener("click", () => {
-      const wasSelected = el.classList.contains("selected");
+      const wasSelected = graphState.selectedId === node.id;
       document.querySelectorAll(".graph-node").forEach((n) => n.classList.remove("selected"));
       if (wasSelected) {
+        graphState.selectedId = null;
         document.getElementById("graph-detail").classList.add("hidden");
         clearGraphFilter();
         return;
       }
+      graphState.selectedId = node.id;
       el.classList.add("selected");
       applyGraphFilter(node);
       showGraphDetail(node, rootQuery);
@@ -446,11 +535,62 @@ function makeGraphNode(node, x, y, rootQuery) {
   return el;
 }
 
-// Narrows the results list down to only the items a graph node actually matches, instead of
-// just dimming the rest in place — with pools running into the hundreds, scrolling past a wall
-// of faded cards to spot the few real matches wasn't much better than no highlight at all.
-// Filters the full fetched pool, not just the current on-screen page, so pagination is turned
-// off while a filter is active — a filtered set is normally small enough to show in one go.
+// Materializes a node's related tags as child nodes (capped at EXPAND_CHILD_CAP); toggling
+// an already-expanded node collapses its branch instead
+async function toggleExpandNode(node) {
+  if (node.expanded) {
+    collapseBranch(node);
+    renderGraphDOM();
+    showGraphDetail(node, graphState.rootQuery);
+    return;
+  }
+
+  if (graphState.nodesById.size >= GRAPH_NODE_CAP) return;
+
+  let data = expandCache[node.label];
+  if (!data) {
+    try {
+      const res = await fetch(`${API_BASE}/graph/expand?tag=${encodeURIComponent(node.label)}`);
+      data = await res.json();
+      expandCache[node.label] = data;
+    } catch {
+      data = { relatedTags: [] };
+    }
+  }
+
+  const existingIds = new Set(graphState.nodesById.keys());
+  const candidates = (data.relatedTags ?? [])
+    .filter((t) => t.tag !== graphState.rootQuery.toLowerCase() && t.tag !== node.id && !existingIds.has(t.tag))
+    .slice(0, EXPAND_CHILD_CAP);
+
+  const childIds = [];
+  candidates.forEach((c) => {
+    const matched = itemsMatchingTagJS(resultPool, c.tag);
+    graphState.nodesById.set(c.tag, {
+      id: c.tag, label: c.tag, relation: c.relation, frequency: c.frequency,
+      matchCount: matched.length, matchedIds: matched.map((m) => m.id),
+      parentId: node.id, depth: node.depth + 1, expanded: false, children: [],
+    });
+    childIds.push(c.tag);
+  });
+
+  node.children = childIds;
+  node.expanded = true;
+  renderGraphDOM();
+  showGraphDetail(node, graphState.rootQuery);
+}
+
+function collapseBranch(node) {
+  node.children.forEach((childId) => {
+    const child = graphState.nodesById.get(childId);
+    if (child) collapseBranch(child);
+    graphState.nodesById.delete(childId);
+  });
+  node.children = [];
+  node.expanded = false;
+}
+
+// Filters the full fetched pool (not just the current page), so pagination is hidden while active
 function applyGraphFilter(node) {
   activeFilter = { ids: new Set(node.matchedIds ?? []), label: node.label };
   const filtered = resultPool.filter((item) => activeFilter.ids.has(item.id));
@@ -472,13 +612,13 @@ function renderFilterBanner() {
   el.classList.remove("hidden");
   el.innerHTML = `Mostrando solo i risultati per <strong>${escapeHtml(activeFilter.label)}</strong> <button id="clear-filter-btn">Mostra tutti</button>`;
   document.getElementById("clear-filter-btn").addEventListener("click", () => {
+    if (graphState) graphState.selectedId = null;
     document.querySelectorAll(".graph-node.selected").forEach((n) => n.classList.remove("selected"));
     document.getElementById("graph-detail").classList.add("hidden");
     clearGraphFilter();
   });
 }
 
-// Clicking a node shows its own relations (fetched lazily) without leaving the current search
 async function showGraphDetail(node, rootQuery) {
   const detail = document.getElementById("graph-detail");
   detail.classList.remove("hidden");
@@ -510,12 +650,24 @@ async function showGraphDetail(node, rootQuery) {
     ? `<span class="match-info freq-info">${node.frequency}% frequenza rispetto al termine più comune della stessa categoria</span>`
     : "";
 
+  const existingIds = new Set(graphState.nodesById.keys());
+  const expandableCount = relTags.filter((t) => t.tag !== node.id && !existingIds.has(t.tag)).length;
+  const atCap = !node.expanded && graphState.nodesById.size >= GRAPH_NODE_CAP;
+  const expandLabel = node.expanded
+    ? "− Comprimi ramo"
+    : atCap
+    ? "Mappa piena (40 nodi)"
+    : `+ Espandi nel grafo (${Math.min(expandableCount, EXPAND_CHILD_CAP)})`;
+  const expandDisabled = atCap || (!node.expanded && expandableCount === 0);
+  const expandBtn = node.relation === "root" ? "" : `
+      <button class="graph-detail-expand${node.expanded ? " expanded" : ""}" ${expandDisabled ? "disabled" : ""}>${expandLabel}</button>`;
+
   detail.innerHTML = `
     <div class="graph-detail-header">
       <strong>${escapeHtml(node.label)}</strong>
       <span class="rel-badge rel-${node.relation}">${node.relation === "root" ? "query" : node.relation} rispetto a "${escapeHtml(rootQuery)}"</span>
       <button class="graph-detail-concept" data-tag="${escapeHtml(node.label)}">📖 Pagina di sintesi</button>
-      <button class="graph-detail-search" data-tag="${escapeHtml(node.label)}">Cerca «${escapeHtml(node.label)}»</button>
+      <button class="graph-detail-search" data-tag="${escapeHtml(node.label)}">Cerca «${escapeHtml(node.label)}»</button>${expandBtn}
     </div>
     <div class="graph-detail-match">${matchInfo} ${freqInfo}</div>
     <div class="graph-detail-relations">${chips}</div>
@@ -527,16 +679,15 @@ async function showGraphDetail(node, rootQuery) {
   detail.querySelector(".graph-detail-search")?.addEventListener("click", () => {
     searchTag(node.label, rootQuery, node.relation);
   });
+  detail.querySelector(".graph-detail-expand")?.addEventListener("click", () => {
+    toggleExpandNode(node);
+  });
   detail.querySelectorAll(".graph-detail-relations .tag-chip").forEach((chip) => {
     chip.addEventListener("click", () => searchTag(chip.dataset.tag, node.label, chip.dataset.relation));
   });
 }
 
-// --- Concept synthesis page ---
-// Aggregates everything the system already knows about a single concept into one place:
-// its definition (fetched fresh, independent of whatever category the search happened to
-// run), the results from THIS search that are actually tagged with it, and its own related
-// concepts — turning a scattered set of matches into one coherent "page" for that concept.
+// --- Concept synthesis page --- definition + matched results + related concepts, one place
 async function openConceptPage(node, rootQuery) {
   const modal = document.getElementById("concept-modal");
   const title = document.getElementById("concept-modal-title");
@@ -712,8 +863,7 @@ function openResultModal(item) {
   document.getElementById("result-modal").classList.remove("hidden");
 }
 
-// Surfaces other results from the same search that share at least one tag —
-// this is what turns a click from "leave the site" into "keep exploring the knowledge".
+// Other results from the same search sharing at least one tag
 function renderModalRelated(item) {
   const relatedSection = document.getElementById("modal-related");
   const relatedGrid = document.getElementById("modal-related-grid");

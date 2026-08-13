@@ -13,18 +13,14 @@ const etymonline: Connector = {
       const html = await plainFetchPage(url);
       const $ = cheerio.load(html);
       const items: any[] = [];
-      // Each word card ends with a "Related entries & more" link pointing at the same
-      // /word/ href as the real entry — it matches the same selector as a genuine title,
-      // so it has to be filtered out by text rather than by structure.
+      // "Related entries & more" links match the same /word/ selector as real titles
       const JUNK_TITLES = /related entries|remove ads|advertisement/i;
 
       $("section, article, [class*='word']").each((_, el) => {
         const link = $(el).find("a[href*='/word/']").first();
         const href = link.attr("href") ?? "";
         const title = link.find("[class*='name'], strong, h3").first().text().trim() || link.text().trim();
-        // Each entry's markup includes a "Remove Ads" prompt as a <p> before the actual
-        // definition, so grabbing the first match picks up ad copy instead — skip anything
-        // too short or matching known boilerplate and take the first real paragraph.
+        // Skip the "Remove Ads" boilerplate paragraph, take the first real one
         const description = $(el)
           .find("p, [class*='def']")
           .toArray()

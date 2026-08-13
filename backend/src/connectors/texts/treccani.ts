@@ -13,11 +13,8 @@ const treccani: Connector = {
       const html = await scrapePage(url, "a[href*='/vocabolario/'], a[href*='/enciclopedia/']");
       const $ = cheerio.load(html);
       const items: any[] = [];
-      // Some list items are page-navigation links ("Indietro", "Avanti"...) that happen to
-      // match the same href pattern as real dictionary entries — filter them out by title.
-      // When there's no real match for a term (e.g. an English phrase in an Italian
-      // dictionary), the page also falls back to a bare "/vocabolario/" link to the
-      // section homepage itself, titled "Vocabolario" — exclude that by href shape too.
+      // Nav links ("Indietro", "Avanti"...) and the bare no-results fallback link share the
+      // same href pattern as real entries — filter both out by title/href shape.
       const NAV_TITLES = new Set(["indietro", "avanti", "successivo", "precedente", "vai", "cerca", "home", "vocabolario", "enciclopedia"]);
       const isBareSectionLink = (href: string) => /^\/(vocabolario|enciclopedia)\/?$/.test(href);
 

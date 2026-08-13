@@ -1,7 +1,4 @@
-// Curated list of explicit / NSFW terms used to keep Safe Search meaningful for
-// connectors that have no native content-moderation option of their own.
-// Source: LDNOOBW, "List of Dirty, Naughty, Obscene, and Otherwise Bad Words" (CC BY 4.0)
-// https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words
+// Source: LDNOOBW (CC BY 4.0) — github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words
 export const BLOCKED_TERMS: string[] = [
   "2g1c",
   "2 girls 1 cup",
