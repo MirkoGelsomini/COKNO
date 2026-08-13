@@ -1,22 +1,29 @@
 // Semantic knowledge graph — models conceptual relationships for query expansion
 
 import { SearchItem } from "../connectors/types";
+import { textRelatesToQuery } from "./textRelevance";
 
 type RelationType = "synonym" | "related" | "broader" | "narrower";
 
 interface Relation {
   type: RelationType;
   target: string;
+  // 0-100, the candidate's Datamuse score relative to the top scorer in its own relation-type
+  // list (e.g. synonyms are only compared against other synonyms of the same word) — undefined
+  // for ConceptNet-sourced relations, which don't carry a comparable score.
+  frequency?: number;
 }
 
 export interface RelatedTag {
   tag: string;
   relation: RelationType;
+  frequency?: number;
 }
 
 const FETCH_TIMEOUT_MS = 5000;
 const RELATIONS_CACHE_TTL_MS = 30 * 60 * 1000;
 const relationsCache = new Map<string, { relations: Relation[]; expiresAt: number }>();
+const NODE_CAP = 12; // "una decina" of related nodes shown per query, plus the root
 
 async function fetchJson(url: string): Promise<any | undefined> {
   const controller = new AbortController();
@@ -37,14 +44,14 @@ async function fetchJson(url: string): Promise<any | undefined> {
 async function fetchFromDatamuse(term: string): Promise<Relation[]> {
   const encoded = encodeURIComponent(term);
   // md=p asks Datamuse for each candidate's part-of-speech tags, used below to prefer
-  // nominal, less-ambiguous senses. Pulling a larger pool than we need (max=8/6/6) gives
-  // the ranking something to actually choose between after the obviously-ambiguous ones
-  // sink to the bottom.
+  // nominal, less-ambiguous senses. Pulling a larger pool than we need gives the ranking
+  // something to actually choose between after the obviously-ambiguous ones sink to the
+  // bottom, and after the frequency floor below trims the weakest tail.
   const [syn, gen, spc, trg] = await Promise.all([
-    fetchJson(`https://api.datamuse.com/words?rel_syn=${encoded}&max=8&md=p`),
-    fetchJson(`https://api.datamuse.com/words?rel_gen=${encoded}&max=6&md=p`),
-    fetchJson(`https://api.datamuse.com/words?rel_spc=${encoded}&max=6&md=p`),
-    fetchJson(`https://api.datamuse.com/words?rel_trg=${encoded}&max=4&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_syn=${encoded}&max=10&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_gen=${encoded}&max=8&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_spc=${encoded}&max=8&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_trg=${encoded}&max=6&md=p`),
   ]);
 
   const relations: Relation[] = [];
@@ -64,22 +71,38 @@ async function fetchFromDatamuse(term: string): Promise<Relation[]> {
     return (hasNoun ? 0 : 10) + (posTags.length || 1);
   };
 
+  // Datamuse's score reflects both relation strength and general word frequency. A
+  // candidate scoring far below the top match in its own list is often a sign of having
+  // drifted into a rarer, different sense of the word — "consumption"'s rel_syn list mixes
+  // its common "usage" sense (use, expenditure, intake — tens of thousands) with its archaic
+  // "tuberculosis" sense (phthisis, wasting disease — a few thousand or less). This won't
+  // catch every case (a rare-but-correct synonym can still score low), but it trims the
+  // longest, weakest tail without needing real word-sense disambiguation.
+  const FREQUENCY_FLOOR = 0.2;
+
   const addAll = (list: any[] | undefined, type: RelationType, cap: number) => {
-    const ranked = [...(list ?? [])].sort((a, b) => ambiguityRank(a.tags) - ambiguityRank(b.tags));
+    const pool = list ?? [];
+    const maxScore = Math.max(0, ...pool.map((e) => e?.score ?? 0));
+    const frequent = pool.filter((e) => (e?.score ?? 0) >= maxScore * FREQUENCY_FLOOR);
+    const ranked = frequent.sort((a, b) => ambiguityRank(a.tags) - ambiguityRank(b.tags));
     let added = 0;
     for (const entry of ranked) {
-      if (added >= cap || relations.length >= 8) break;
+      if (added >= cap || relations.length >= NODE_CAP) break;
       const target: string | undefined = entry?.word?.toLowerCase();
       if (!target || seen.has(target)) continue;
-      relations.push({ type, target });
+      const frequency = maxScore > 0 ? Math.round(((entry?.score ?? 0) / maxScore) * 100) : undefined;
+      relations.push({ type, target, frequency });
       seen.add(target);
       added++;
     }
   };
 
+  // Synonym cap stays at 3, not bumped along with the others: this is exactly the list where
+  // "prime" (flower's peak/heyday sense, not the plant) crept back in at 4 — raising it
+  // reopens the ambiguity problem the frequency floor and ambiguity rank were fixing.
   addAll(syn, "synonym", 3);
-  addAll(gen, "broader", 2);
-  addAll(spc, "narrower", 2);
+  addAll(gen, "broader", 3);
+  addAll(spc, "narrower", 3);
   addAll(trg, "related", 4);
 
   return relations;
@@ -115,7 +138,7 @@ async function fetchFromConceptNet(term: string): Promise<Relation[]> {
 
     relations.push({ type, target });
     seen.add(target);
-    if (relations.length >= 8) break;
+    if (relations.length >= NODE_CAP) break;
   }
 
   return relations;
@@ -174,9 +197,9 @@ export async function getRelatedTags(query: string): Promise<RelatedTag[]> {
     relations = [];
 
     // Round-robin across words so a short phrase reflects all its parts, not just the first
-    while (relations.length < 8) {
+    while (relations.length < NODE_CAP) {
       let progressed = false;
-      for (let i = 0; i < perWord.length && relations.length < 8; i++) {
+      for (let i = 0; i < perWord.length && relations.length < NODE_CAP; i++) {
         while (cursors[i] < perWord[i].length) {
           const rel = perWord[i][cursors[i]++];
           if (seen.has(rel.target)) continue;
@@ -190,7 +213,7 @@ export async function getRelatedTags(query: string): Promise<RelatedTag[]> {
     }
   }
 
-  return relations.map((r) => ({ tag: r.target, relation: r.type }));
+  return relations.map((r) => ({ tag: r.target, relation: r.type, frequency: r.frequency }));
 }
 
 export interface GraphNode {
@@ -199,6 +222,7 @@ export interface GraphNode {
   relation: RelationType | "root";
   matchCount: number;
   matchedIds: string[];
+  frequency?: number;
 }
 
 export interface GraphEdge {
@@ -214,8 +238,11 @@ function itemsMatchingTag(items: SearchItem[], tag: string): SearchItem[] {
   const needle = tag.toLowerCase();
   return items.filter((item) => {
     if (item.tags?.some((t) => t.toLowerCase() === needle)) return true;
-    const haystack = `${item.title} ${item.description ?? ""}`.toLowerCase();
-    return haystack.includes(needle);
+    // Exact substring missed simple inflections (plurals, verb forms) — same stemmed
+    // comparison already used for the safe-search/definitions/batch-relevance checks, so
+    // "blossoms" in a description now counts as matching the "blossom" node, for instance.
+    const haystack = `${item.title} ${item.description ?? ""}`;
+    return textRelatesToQuery(haystack, tag);
   });
 }
 
@@ -234,7 +261,7 @@ export function buildGraphNodes(
   ];
   const edges: GraphEdge[] = [];
 
-  for (const { tag, relation } of relatedTags) {
+  for (const { tag, relation, frequency } of relatedTags) {
     const matched = itemsMatchingTag(items, tag);
     nodes.push({
       id: tag,
@@ -242,6 +269,7 @@ export function buildGraphNodes(
       relation,
       matchCount: matched.length,
       matchedIds: matched.map((i) => i.id),
+      frequency,
     });
     edges.push({ source: rootId, target: tag, relation });
   }

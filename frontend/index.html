@@ -26,6 +26,8 @@
       </div>
     </form>
 
+    <div id="spelling-suggestion" class="hidden"></div>
+
     <nav class="category-tabs">
       <button class="tab active" data-category="">All</button>
       <button class="tab" data-category="images">Images</button>
@@ -48,7 +50,10 @@
 
     <section id="meta-section" class="hidden">
       <div id="query-info"></div>
-      <div id="source-badges"></div>
+      <details id="source-details">
+        <summary id="source-summary"></summary>
+        <div id="source-badges"></div>
+      </details>
       <div id="related-tags"></div>
     </section>
 
@@ -70,6 +75,7 @@
 
     <section id="results-section">
       <div id="status-message"></div>
+      <div id="result-filter-banner" class="hidden"></div>
       <div id="results-grid"></div>
       <div id="pagination" class="hidden"></div>
     </section>
@@ -92,6 +98,31 @@
         <h3>Risultati correlati</h3>
         <div id="modal-related-grid"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="concept-modal" class="modal hidden">
+    <div id="concept-modal-backdrop"></div>
+    <div class="modal-content concept-modal-content">
+      <button id="concept-modal-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="concept-modal-header">
+        <span id="concept-modal-relation" class="rel-badge"></span>
+        <h2 id="concept-modal-title"></h2>
+      </div>
+
+      <div id="concept-modal-definitions" class="concept-modal-section"></div>
+
+      <div id="concept-modal-media" class="concept-modal-section hidden">
+        <h3>Risultati di questa ricerca</h3>
+        <div id="concept-modal-media-grid"></div>
+      </div>
+
+      <div id="concept-modal-related" class="concept-modal-section">
+        <h3>Concetti collegati</h3>
+        <div id="concept-modal-related-list"></div>
+      </div>
+
+      <button id="concept-modal-search-btn" class="modal-open-btn">Cerca questo termine</button>
     </div>
   </div>
 

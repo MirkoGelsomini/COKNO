@@ -120,6 +120,25 @@ main {
   font-size: 0.95rem;
 }
 
+#spelling-suggestion {
+  text-align: center;
+  color: #888;
+  font-size: 0.88rem;
+  margin-top: 0.8rem;
+}
+
+.spelling-suggestion-btn {
+  background: none;
+  border: none;
+  color: #7e7ec9;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.spelling-suggestion-btn:hover { color: #9e9ee9; }
+
 #results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -142,12 +161,26 @@ main {
   outline: none;
 }
 
-.result-card.dimmed { opacity: 0.25; }
-
-.result-card.matched {
-  border-color: #7e7ec9;
-  box-shadow: 0 0 0 1px #7e7ec9;
+#result-filter-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #999;
+  padding: 0.6rem 0;
 }
+
+#clear-filter-btn {
+  background: none;
+  border: 1px solid #3a3a5a;
+  color: #7e7ec9;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.2rem 0.7rem;
+  border-radius: 20px;
+  cursor: pointer;
+}
+#clear-filter-btn:hover { background: #1e1e2a; }
 
 .result-card img {
   width: 100%;
@@ -238,11 +271,26 @@ main {
 .tab:hover { border-color: #666; color: #ccc; }
 .tab.active { background: #fff; color: #000; border-color: #fff; }
 
+#source-details {
+  margin-bottom: 0.8rem;
+}
+
+#source-summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #777;
+  list-style: none; /* hide the default disclosure triangle so our own "▾" is the only one */
+  user-select: none;
+}
+#source-summary::-webkit-details-marker { display: none; }
+#source-summary:hover { color: #ccc; }
+#source-details[open] #source-summary { color: #ccc; }
+
 #source-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-bottom: 0.8rem;
+  margin-top: 0.6rem;
 }
 
 .source-badge {
@@ -580,8 +628,20 @@ main {
 .rel-badge.rel-broader  { color: #c97e7e; }
 .rel-badge.rel-narrower { color: #c9c97e; }
 
-.graph-detail-search {
+.graph-detail-concept {
   margin-left: auto;
+  padding: 0.3rem 0.75rem;
+  background: transparent;
+  color: #7e7ec9;
+  border: 1px solid #3a3a5a;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.graph-detail-concept:hover { background: #1e1e2a; }
+
+.graph-detail-search {
   padding: 0.3rem 0.75rem;
   background: #fff;
   color: #000;
@@ -613,6 +673,14 @@ main {
 }
 .match-info.match-yes { background: #1e2a1e; color: #7ec97e; }
 .match-info.match-no  { background: #221a1a; color: #a06060; }
+.match-info.freq-info { background: #1a1a1a; color: #888; }
+
+.node-freq {
+  opacity: 0.65;
+  font-size: 0.68rem;
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
 
 /* --- Result detail modal --- */
 .modal {
@@ -723,3 +791,92 @@ main {
 }
 
 .no-thumb.small { font-size: 0.6rem; }
+
+/* --- Concept synthesis page --- */
+#concept-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.concept-modal-content {
+  max-width: 760px;
+}
+
+#concept-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+  padding-right: 1.5rem;
+}
+
+#concept-modal-header h2 {
+  font-size: 1.3rem;
+  color: #eee;
+}
+
+.concept-modal-section {
+  margin-bottom: 1.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid #222;
+}
+.concept-modal-section:first-of-type { padding-top: 0; border-top: none; }
+
+.concept-modal-section h3 {
+  font-size: 0.85rem;
+  color: #888;
+  font-weight: 500;
+  margin-bottom: 0.7rem;
+}
+
+#concept-modal-definitions #definitions-list,
+#concept-modal-definitions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.9rem;
+}
+
+.concept-loading, .concept-empty {
+  font-size: 0.85rem;
+  color: #555;
+  grid-column: 1 / -1;
+}
+
+#concept-modal-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.7rem;
+}
+
+.concept-media-item {
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #222;
+  background: #161616;
+}
+
+.concept-media-item img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  display: block;
+}
+
+.concept-media-caption {
+  font-size: 0.72rem;
+  color: #999;
+  padding: 0.4rem 0.5rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+#concept-modal-related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

@@ -12,6 +12,7 @@ let resultPool = []; // full combined item pool fetched for the current backend 
 let currentItems = [];
 let expandCache = {}; // tag -> {expandedTerms, relatedTags} from /graph/expand
 let pendingNavigation = null; // {from, relation} set right before a graph-driven search
+let activeFilter = null; // {ids: Set<string>, label} when a graph node is narrowing the results list
 
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -75,6 +76,7 @@ async function runSearch() {
     }
 
     renderMeta(data);
+    renderSpellingSuggestion(data.spellingSuggestion);
     renderDefinitions(data.definitions);
     renderGraph(data.knowledgeGraph, data.query);
     renderResultsSlice();
@@ -237,9 +239,16 @@ function renderMeta(data) {
   if (data.expandedQuery) info += ` → expanded: <strong>"${data.expandedQuery}"</strong>`;
   document.getElementById("query-info").innerHTML = info;
 
+  // Collapsed by default behind a <details> — with up to ~99 sources for "All", the full
+  // badge list ate a lot of vertical space before the user ever saw a result.
+  const sources = data.sources ?? [];
+  const withResults = sources.filter((s) => !s.error && s.count > 0).length;
+  document.getElementById("source-summary").textContent =
+    `${withResults}/${sources.length} fonti con risultati ▾`;
+
   const badges = document.getElementById("source-badges");
   badges.innerHTML = "";
-  (data.sources ?? []).forEach(({ source, count, error }) => {
+  sources.forEach(({ source, count, error }) => {
     const b = document.createElement("span");
     b.className = "source-badge" + (error ? " source-error" : "");
     b.textContent = error ? `${source} ✕` : `${source} (${count})`;
@@ -265,6 +274,33 @@ function renderMeta(data) {
   }
 }
 
+// Shared markup for a definition entry — used both by the top-of-page "Definizione" box
+// and by the concept page modal, so the two don't drift into inconsistent layouts.
+function definitionCardsHtml(definitions) {
+  return definitions.map((d) => `
+    <div class="definition-card">
+      <div class="definition-source">${escapeHtml(d.source)}</div>
+      <div class="definition-title">${escapeHtml(d.title)}</div>
+      ${d.description ? `<p class="definition-text">${escapeHtml(d.description)}</p>` : ""}
+      <a class="definition-link" href="${d.url}" target="_blank" rel="noopener">Apri su ${escapeHtml(d.source)} ↗</a>
+    </div>
+  `).join("");
+}
+
+// Purely an optional hint — never changes what was actually searched. Clicking it just
+// re-runs the search with the corrected spelling, same as clicking any other suggested term.
+function renderSpellingSuggestion(suggestion) {
+  const el = document.getElementById("spelling-suggestion");
+  if (!suggestion) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = `Forse intendevi: <button class="spelling-suggestion-btn">${escapeHtml(suggestion)}</button>?`;
+  el.querySelector(".spelling-suggestion-btn").addEventListener("click", () => searchTag(suggestion));
+}
+
 // Surfaces dictionary/etymology results (Merriam-Webster, Cambridge, Etymonline, Treccani)
 // as a dedicated box instead of leaving them as just another card lost in the grid —
 // this is the fast, authoritative answer to "what does this mean", shown before anything else.
@@ -279,14 +315,7 @@ function renderDefinitions(definitions) {
   }
 
   section.classList.remove("hidden");
-  list.innerHTML = definitions.map((d) => `
-    <div class="definition-card">
-      <div class="definition-source">${escapeHtml(d.source)}</div>
-      <div class="definition-title">${escapeHtml(d.title)}</div>
-      ${d.description ? `<p class="definition-text">${escapeHtml(d.description)}</p>` : ""}
-      <a class="definition-link" href="${d.url}" target="_blank" rel="noopener">Apri su ${escapeHtml(d.source)} ↗</a>
-    </div>
-  `).join("");
+  list.innerHTML = definitionCardsHtml(definitions);
 }
 
 // Sets the query box to a tag and re-runs the search. When reached via a graph node
@@ -345,8 +374,9 @@ function renderGraph(graph, query) {
   // the match-count badge, when present) and grow the ring so its circumference comfortably
   // fits all of them — short graphs stay compact, long/crowded ones spread out automatically.
   const estimateNodeWidth = (node) => {
-    const badgeWidth = node.matchCount > 0 ? 30 : 0;
-    return 34 + node.label.length * 7.2 + badgeWidth;
+    const countWidth = node.matchCount > 0 ? 30 : 0;
+    const freqWidth = node.frequency != null ? 34 : 0;
+    return 34 + node.label.length * 7.2 + countWidth + freqWidth;
   };
 
   const width = canvas.clientWidth || 600;
@@ -388,12 +418,14 @@ function makeGraphNode(node, x, y, rootQuery) {
   if (node.relation !== "root" && node.matchCount === 0) el.classList.add("no-match");
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
+  const freqBadge = node.frequency != null ? ` <span class="node-freq">${node.frequency}%</span>` : "";
+  const countBadge = node.matchCount > 0 ? ` <span class="node-count">${node.matchCount}</span>` : "";
   el.innerHTML = node.relation === "root"
     ? escapeHtml(node.label)
-    : `${escapeHtml(node.label)}${node.matchCount > 0 ? ` <span class="node-count">${node.matchCount}</span>` : ""}`;
+    : `${escapeHtml(node.label)}${freqBadge}${countBadge}`;
   el.title = node.relation === "root"
     ? "Query corrente"
-    : `${node.relation} — ${node.matchCount} risultat${node.matchCount === 1 ? "o" : "i"} corrente${node.matchCount === 1 ? "" : "i"}`;
+    : `${node.relation}${node.frequency != null ? ` — ${node.frequency}% frequenza` : ""} — ${node.matchCount} risultat${node.matchCount === 1 ? "o" : "i"} corrente${node.matchCount === 1 ? "" : "i"}`;
 
   if (node.relation === "root") {
     el.classList.add("root");
@@ -401,40 +433,49 @@ function makeGraphNode(node, x, y, rootQuery) {
     el.addEventListener("click", () => {
       const wasSelected = el.classList.contains("selected");
       document.querySelectorAll(".graph-node").forEach((n) => n.classList.remove("selected"));
-      clearHighlights();
       if (wasSelected) {
         document.getElementById("graph-detail").classList.add("hidden");
+        clearGraphFilter();
         return;
       }
       el.classList.add("selected");
-      highlightMatches(node.matchedIds);
+      applyGraphFilter(node);
       showGraphDetail(node, rootQuery);
     });
   }
   return el;
 }
 
-// Dims every result card except the ones a graph node actually matches, and scrolls
-// the first match into view — this is what ties the graph to the results already on screen.
-function highlightMatches(matchedIds) {
-  const ids = new Set(matchedIds ?? []);
-  const cards = document.querySelectorAll(".result-card");
-  if (ids.size === 0) {
-    cards.forEach((c) => c.classList.remove("dimmed", "matched"));
-    return;
-  }
-  let firstMatch = null;
-  cards.forEach((c) => {
-    const isMatch = ids.has(c.dataset.itemId);
-    c.classList.toggle("matched", isMatch);
-    c.classList.toggle("dimmed", !isMatch);
-    if (isMatch && !firstMatch) firstMatch = c;
-  });
-  firstMatch?.scrollIntoView({ behavior: "smooth", block: "center" });
+// Narrows the results list down to only the items a graph node actually matches, instead of
+// just dimming the rest in place — with pools running into the hundreds, scrolling past a wall
+// of faded cards to spot the few real matches wasn't much better than no highlight at all.
+// Filters the full fetched pool, not just the current on-screen page, so pagination is turned
+// off while a filter is active — a filtered set is normally small enough to show in one go.
+function applyGraphFilter(node) {
+  activeFilter = { ids: new Set(node.matchedIds ?? []), label: node.label };
+  const filtered = resultPool.filter((item) => activeFilter.ids.has(item.id));
+  renderResults(filtered, currentCategory);
+  renderFilterBanner();
+  document.getElementById("pagination").classList.add("hidden");
+  setStatus(filtered.length === 0 ? `Nessun risultato di questa ricerca è taggato con "${node.label}".` : "");
 }
 
-function clearHighlights() {
-  document.querySelectorAll(".result-card").forEach((c) => c.classList.remove("dimmed", "matched"));
+function clearGraphFilter() {
+  activeFilter = null;
+  document.getElementById("result-filter-banner").classList.add("hidden");
+  renderResultsSlice();
+  setStatus(resultPool.length === 0 ? "No results found." : "");
+}
+
+function renderFilterBanner() {
+  const el = document.getElementById("result-filter-banner");
+  el.classList.remove("hidden");
+  el.innerHTML = `Mostrando solo i risultati per <strong>${escapeHtml(activeFilter.label)}</strong> <button id="clear-filter-btn">Mostra tutti</button>`;
+  document.getElementById("clear-filter-btn").addEventListener("click", () => {
+    document.querySelectorAll(".graph-node.selected").forEach((n) => n.classList.remove("selected"));
+    document.getElementById("graph-detail").classList.add("hidden");
+    clearGraphFilter();
+  });
 }
 
 // Clicking a node shows its own relations (fetched lazily) without leaving the current search
@@ -457,7 +498,7 @@ async function showGraphDetail(node, rootQuery) {
   const relTags = (data.relatedTags ?? []).filter((t) => t.tag !== rootQuery.toLowerCase());
   const chips = relTags.length
     ? relTags.map(
-        (t) => `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}</button>`
+        (t) => `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}${t.frequency != null ? ` <span class="node-freq">${t.frequency}%</span>` : ""}</button>`
       ).join("")
     : `<span class="graph-detail-empty">Nessuna relazione ulteriore trovata.</span>`;
 
@@ -465,16 +506,24 @@ async function showGraphDetail(node, rootQuery) {
     ? `<span class="match-info match-yes">Presente in ${node.matchCount} risultat${node.matchCount === 1 ? "o" : "i"} di questa ricerca</span>`
     : `<span class="match-info match-no">Nessun risultato attuale è taggato con questo termine</span>`;
 
+  const freqInfo = node.frequency != null
+    ? `<span class="match-info freq-info">${node.frequency}% frequenza rispetto al termine più comune della stessa categoria</span>`
+    : "";
+
   detail.innerHTML = `
     <div class="graph-detail-header">
       <strong>${escapeHtml(node.label)}</strong>
       <span class="rel-badge rel-${node.relation}">${node.relation === "root" ? "query" : node.relation} rispetto a "${escapeHtml(rootQuery)}"</span>
+      <button class="graph-detail-concept" data-tag="${escapeHtml(node.label)}">📖 Pagina di sintesi</button>
       <button class="graph-detail-search" data-tag="${escapeHtml(node.label)}">Cerca «${escapeHtml(node.label)}»</button>
     </div>
-    <div class="graph-detail-match">${matchInfo}</div>
+    <div class="graph-detail-match">${matchInfo} ${freqInfo}</div>
     <div class="graph-detail-relations">${chips}</div>
   `;
 
+  detail.querySelector(".graph-detail-concept")?.addEventListener("click", () => {
+    openConceptPage(node, rootQuery);
+  });
   detail.querySelector(".graph-detail-search")?.addEventListener("click", () => {
     searchTag(node.label, rootQuery, node.relation);
   });
@@ -482,6 +531,98 @@ async function showGraphDetail(node, rootQuery) {
     chip.addEventListener("click", () => searchTag(chip.dataset.tag, node.label, chip.dataset.relation));
   });
 }
+
+// --- Concept synthesis page ---
+// Aggregates everything the system already knows about a single concept into one place:
+// its definition (fetched fresh, independent of whatever category the search happened to
+// run), the results from THIS search that are actually tagged with it, and its own related
+// concepts — turning a scattered set of matches into one coherent "page" for that concept.
+async function openConceptPage(node, rootQuery) {
+  const modal = document.getElementById("concept-modal");
+  const title = document.getElementById("concept-modal-title");
+  const relationBadge = document.getElementById("concept-modal-relation");
+  const defsEl = document.getElementById("concept-modal-definitions");
+  const mediaSection = document.getElementById("concept-modal-media");
+  const mediaGrid = document.getElementById("concept-modal-media-grid");
+  const relatedSection = document.getElementById("concept-modal-related");
+  const relatedList = document.getElementById("concept-modal-related-list");
+  const searchBtn = document.getElementById("concept-modal-search-btn");
+
+  title.textContent = node.label;
+  relationBadge.className = `rel-badge rel-${node.relation}`;
+  relationBadge.textContent = `${node.relation === "root" ? "query" : node.relation} rispetto a "${rootQuery}"`;
+  defsEl.innerHTML = `<p class="concept-loading">Caricamento definizione…</p>`;
+  relatedList.innerHTML = `<p class="concept-loading">Caricamento concetti collegati…</p>`;
+  searchBtn.onclick = () => {
+    closeConceptModal();
+    searchTag(node.label, rootQuery, node.relation);
+  };
+
+  // Already in hand from the current search — no extra request needed for this part
+  const matchedIds = new Set(node.matchedIds ?? []);
+  const matchedItems = currentItems.filter((item) => matchedIds.has(item.id));
+  if (matchedItems.length) {
+    mediaSection.classList.remove("hidden");
+    mediaGrid.innerHTML = matchedItems.slice(0, 12).map((item) => `
+      <div class="concept-media-item" data-id="${escapeHtml(item.id)}">
+        ${item.thumbnailUrl
+          ? `<img src="${item.thumbnailUrl}" alt="${escapeHtml(item.title)}" />`
+          : `<div class="no-thumb small">${escapeHtml(item.category)}</div>`}
+        <div class="concept-media-caption">${escapeHtml(item.title)}</div>
+      </div>
+    `).join("");
+    mediaGrid.querySelectorAll(".concept-media-item").forEach((el) => {
+      el.addEventListener("click", () => {
+        const item = matchedItems.find((i) => i.id === el.dataset.id);
+        if (item) {
+          closeConceptModal();
+          openResultModal(item);
+        }
+      });
+    });
+  } else {
+    mediaSection.classList.add("hidden");
+  }
+
+  modal.classList.remove("hidden");
+
+  try {
+    const safe = safeCheckbox.checked;
+    const res = await fetch(`${API_BASE}/concept?tag=${encodeURIComponent(node.label)}&safe=${safe}`);
+    const data = await res.json();
+
+    defsEl.innerHTML = data.definitions?.length
+      ? definitionCardsHtml(data.definitions)
+      : `<p class="concept-empty">Nessuna definizione trovata per questo termine.</p>`;
+
+    const related = (data.relatedTags ?? []).filter((t) => t.tag !== node.label.toLowerCase());
+    relatedSection.classList.toggle("hidden", related.length === 0);
+    relatedList.innerHTML = related.length
+      ? related.map(
+          (t) => `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}</button>`
+        ).join("")
+      : "";
+    relatedList.querySelectorAll(".tag-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        closeConceptModal();
+        searchTag(chip.dataset.tag, node.label, chip.dataset.relation);
+      });
+    });
+  } catch (err) {
+    defsEl.innerHTML = `<p class="concept-empty">Errore nel caricamento: ${escapeHtml(err.message)}</p>`;
+    relatedList.innerHTML = "";
+  }
+}
+
+function closeConceptModal() {
+  document.getElementById("concept-modal").classList.add("hidden");
+}
+
+document.getElementById("concept-modal-close").addEventListener("click", closeConceptModal);
+document.getElementById("concept-modal-backdrop").addEventListener("click", closeConceptModal);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeConceptModal();
+});
 
 // Renders the result grid, using a text-specific layout for the texts category
 function renderResults(items, category) {
@@ -615,7 +756,10 @@ function clearResults() {
   document.getElementById("results-grid").innerHTML = "";
   document.getElementById("graph-section").classList.add("hidden");
   document.getElementById("definitions-section").classList.add("hidden");
+  document.getElementById("spelling-suggestion").classList.add("hidden");
   document.getElementById("pagination").classList.add("hidden");
+  document.getElementById("result-filter-banner").classList.add("hidden");
+  activeFilter = null;
 }
 function escapeHtml(str) {
   return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
