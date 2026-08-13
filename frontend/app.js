@@ -75,6 +75,7 @@ async function runSearch() {
     }
 
     renderMeta(data);
+    renderDefinitions(data.definitions);
     renderGraph(data.knowledgeGraph, data.query);
     renderResultsSlice();
 
@@ -264,6 +265,30 @@ function renderMeta(data) {
   }
 }
 
+// Surfaces dictionary/etymology results (Merriam-Webster, Cambridge, Etymonline, Treccani)
+// as a dedicated box instead of leaving them as just another card lost in the grid —
+// this is the fast, authoritative answer to "what does this mean", shown before anything else.
+function renderDefinitions(definitions) {
+  const section = document.getElementById("definitions-section");
+  const list = document.getElementById("definitions-list");
+
+  if (!definitions?.length) {
+    section.classList.add("hidden");
+    list.innerHTML = "";
+    return;
+  }
+
+  section.classList.remove("hidden");
+  list.innerHTML = definitions.map((d) => `
+    <div class="definition-card">
+      <div class="definition-source">${escapeHtml(d.source)}</div>
+      <div class="definition-title">${escapeHtml(d.title)}</div>
+      ${d.description ? `<p class="definition-text">${escapeHtml(d.description)}</p>` : ""}
+      <a class="definition-link" href="${d.url}" target="_blank" rel="noopener">Apri su ${escapeHtml(d.source)} ↗</a>
+    </div>
+  `).join("");
+}
+
 // Sets the query box to a tag and re-runs the search. When reached via a graph node
 // or related-tag chip, fromQuery/relation record that link for the knowledge trail.
 function searchTag(tag, fromQuery, relation) {
@@ -296,11 +321,17 @@ function renderGraph(graph, query) {
   }
   section.classList.remove("hidden");
 
-  const { coveragePercent, sourcesWithResults, sourcesQueried, categories } = graph.coverage;
+  // Two separate signals, shown separately on purpose: coveragePercent is a content
+  // signal (of the sources that actually responded, how many found something), while
+  // availabilityPercent is an infrastructure signal (how many were even configured/
+  // reachable). Folding them into one number would hide missing API keys and timeouts
+  // behind what looks like "this topic isn't well documented".
+  const { coveragePercent, sourcesWithResults, sourcesAvailable, sourcesQueried, availabilityPercent, categories } = graph.coverage;
   coverageBadge.innerHTML = `
     <span class="coverage-label">Grado di conoscenza</span>
     <div class="coverage-bar"><div class="coverage-fill" style="width:${coveragePercent}%"></div></div>
-    <span class="coverage-value">${coveragePercent}% · ${sourcesWithResults}/${sourcesQueried} fonti · ${categories.length} categorie</span>
+    <span class="coverage-value">${coveragePercent}% · ${sourcesWithResults}/${sourcesAvailable} fonti disponibili · ${categories.length} categorie</span>
+    <span class="coverage-availability" title="Fonti configurate e raggiungibili in questa ricerca, a prescindere dal contenuto trovato">${sourcesAvailable}/${sourcesQueried} fonti raggiungibili (${availabilityPercent}%)</span>
   `;
 
   canvas.querySelectorAll(".graph-node").forEach((n) => n.remove());
@@ -309,13 +340,28 @@ function renderGraph(graph, query) {
   const root = graph.nodes.find((n) => n.relation === "root");
   const related = graph.nodes.filter((n) => n.relation !== "root");
 
+  // A fixed radius made long or numerous labels overlap, since it never accounted for how
+  // wide the chips actually render. Estimate each chip's pixel width from its label (plus
+  // the match-count badge, when present) and grow the ring so its circumference comfortably
+  // fits all of them — short graphs stay compact, long/crowded ones spread out automatically.
+  const estimateNodeWidth = (node) => {
+    const badgeWidth = node.matchCount > 0 ? 30 : 0;
+    return 34 + node.label.length * 7.2 + badgeWidth;
+  };
+
   const width = canvas.clientWidth || 600;
-  const height = canvas.clientHeight || 320;
+  const GAP = 16;
+  const totalArc = related.reduce((sum, n) => sum + estimateNodeWidth(n) + GAP, 0);
+  const minRadius = 130;
+  const maxRadius = Math.max(minRadius, width / 2 - 40); // keep chips from running off narrow viewports
+  const radius = Math.min(Math.max(minRadius, totalArc / (2 * Math.PI)), maxRadius);
+  const canvasHeight = Math.round(radius * 2 + 90);
+
+  canvas.style.height = `${canvasHeight}px`;
   edgesSvg.setAttribute("width", width);
-  edgesSvg.setAttribute("height", height);
+  edgesSvg.setAttribute("height", canvasHeight);
   const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) / 2 - 60;
+  const centerY = canvasHeight / 2;
 
   canvas.appendChild(makeGraphNode(root, centerX, centerY, query));
 
@@ -568,6 +614,7 @@ function setStatus(msg) { document.getElementById("status-message").textContent 
 function clearResults() {
   document.getElementById("results-grid").innerHTML = "";
   document.getElementById("graph-section").classList.add("hidden");
+  document.getElementById("definitions-section").classList.add("hidden");
   document.getElementById("pagination").classList.add("hidden");
 }
 function escapeHtml(str) {

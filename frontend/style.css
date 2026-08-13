@@ -367,6 +367,62 @@ main {
 
 .safe-toggle { margin-left: 0.2rem; }
 
+/* --- Definitions box --- */
+#definitions-section {
+  margin-bottom: 1.5rem;
+  padding: 1.1rem 1.3rem;
+  border: 1px solid #2a2a3a;
+  border-left: 3px solid #7e7ec9;
+  border-radius: 10px;
+  background: #14141c;
+}
+
+#definitions-section h2 {
+  font-size: 0.95rem;
+  color: #ccc;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+#definitions-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.9rem;
+}
+
+.definition-card {
+  padding: 0.4rem 0;
+}
+
+.definition-source {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #7e7ec9;
+  margin-bottom: 0.2rem;
+}
+
+.definition-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #eee;
+  margin-bottom: 0.35rem;
+}
+
+.definition-text {
+  font-size: 0.85rem;
+  color: #bbb;
+  line-height: 1.5;
+  margin-bottom: 0.4rem;
+}
+
+.definition-link {
+  font-size: 0.78rem;
+  color: #7e7ec9;
+  text-decoration: none;
+}
+.definition-link:hover { text-decoration: underline; }
+
 /* --- Knowledge Map --- */
 #graph-section {
   margin-bottom: 2rem;
@@ -394,12 +450,20 @@ main {
 #coverage-badge {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.6rem;
   font-size: 0.78rem;
   color: #888;
 }
 
 .coverage-label { color: #888; white-space: nowrap; }
+
+.coverage-availability {
+  color: #666;
+  white-space: nowrap;
+  padding-left: 0.6rem;
+  border-left: 1px solid #2a2a2a;
+}
 
 .coverage-bar {
   width: 110px;
@@ -420,8 +484,8 @@ main {
 #graph-canvas {
   position: relative;
   width: 100%;
-  height: 320px;
-  overflow: hidden;
+  height: 320px; /* fallback before JS sizes it to fit the current graph's labels */
+  overflow: visible;
 }
 
 #graph-edges {
@@ -451,6 +515,9 @@ main {
   color: #ccc;
   cursor: pointer;
   white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: transform 0.15s, opacity 0.15s;
 }
 

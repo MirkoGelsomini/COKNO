@@ -36,29 +36,51 @@ async function fetchJson(url: string): Promise<any | undefined> {
 // reliably up than ConceptNet. Its rel_* relation codes map directly onto our taxonomy.
 async function fetchFromDatamuse(term: string): Promise<Relation[]> {
   const encoded = encodeURIComponent(term);
+  // md=p asks Datamuse for each candidate's part-of-speech tags, used below to prefer
+  // nominal, less-ambiguous senses. Pulling a larger pool than we need (max=8/6/6) gives
+  // the ranking something to actually choose between after the obviously-ambiguous ones
+  // sink to the bottom.
   const [syn, gen, spc, trg] = await Promise.all([
-    fetchJson(`https://api.datamuse.com/words?rel_syn=${encoded}&max=3`),
-    fetchJson(`https://api.datamuse.com/words?rel_gen=${encoded}&max=2`),
-    fetchJson(`https://api.datamuse.com/words?rel_spc=${encoded}&max=2`),
-    fetchJson(`https://api.datamuse.com/words?rel_trg=${encoded}&max=4`),
+    fetchJson(`https://api.datamuse.com/words?rel_syn=${encoded}&max=8&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_gen=${encoded}&max=6&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_spc=${encoded}&max=6&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_trg=${encoded}&max=4&md=p`),
   ]);
 
   const relations: Relation[] = [];
   const seen = new Set<string>([term.toLowerCase()]);
 
-  const addAll = (list: any, type: RelationType) => {
-    for (const entry of list ?? []) {
+  // Search queries are almost always noun-like ("cat", "sunset"), and WordNet-derived
+  // synonym sets often mix in unrelated senses of a word (flower's synonym list includes
+  // "prime" — not the plant sense, but "prime" as in peak/heyday, tagged adj/n/v/prop).
+  // Words tagged with fewer distinct parts of speech are less likely to be dragging in an
+  // unrelated sense, so we rank those first. This is a heuristic, not real word-sense
+  // disambiguation, but it measurably pushes "efflorescence"/"heyday" ahead of "prime"/
+  // "flush" for a query like "flower" without adding any new infrastructure.
+  const ambiguityRank = (tags: string[] | undefined): number => {
+    if (!tags?.length) return 5;
+    const posTags = tags.filter((t) => t === "n" || t === "v" || t === "adj" || t === "adv");
+    const hasNoun = posTags.includes("n");
+    return (hasNoun ? 0 : 10) + (posTags.length || 1);
+  };
+
+  const addAll = (list: any[] | undefined, type: RelationType, cap: number) => {
+    const ranked = [...(list ?? [])].sort((a, b) => ambiguityRank(a.tags) - ambiguityRank(b.tags));
+    let added = 0;
+    for (const entry of ranked) {
+      if (added >= cap || relations.length >= 8) break;
       const target: string | undefined = entry?.word?.toLowerCase();
-      if (!target || seen.has(target) || relations.length >= 8) continue;
+      if (!target || seen.has(target)) continue;
       relations.push({ type, target });
       seen.add(target);
+      added++;
     }
   };
 
-  addAll(syn, "synonym");
-  addAll(gen, "broader");
-  addAll(spc, "narrower");
-  addAll(trg, "related");
+  addAll(syn, "synonym", 3);
+  addAll(gen, "broader", 2);
+  addAll(spc, "narrower", 2);
+  addAll(trg, "related", 4);
 
   return relations;
 }

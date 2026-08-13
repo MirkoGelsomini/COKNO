@@ -13,12 +13,15 @@ const treccani: Connector = {
       const html = await scrapePage(url, "a[href*='/vocabolario/'], a[href*='/enciclopedia/']");
       const $ = cheerio.load(html);
       const items: any[] = [];
+      // Some list items are page-navigation links ("Indietro", "Avanti"...) that happen to
+      // match the same href pattern as real dictionary entries — filter them out by title.
+      const NAV_TITLES = new Set(["indietro", "avanti", "successivo", "precedente", "vai", "cerca", "home"]);
 
       $("li a[href*='/vocabolario/'], li a[href*='/enciclopedia/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const title = $(el).text().trim();
         const description = $(el).closest("li").find("p, .abstract, span").not($(el)).first().text().trim();
-        if (href && title && title.length > 1 && title.length < 120) {
+        if (href && title && title.length > 1 && title.length < 120 && !NAV_TITLES.has(title.toLowerCase())) {
           items.push({
             id: href,
             title,

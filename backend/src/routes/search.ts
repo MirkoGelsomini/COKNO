@@ -2,11 +2,41 @@ import { Router, Request, Response } from "express";
 import { getConnectors, listSources } from "../connectors/registry";
 import { expandQuery, getRelatedTags, buildGraphNodes } from "../services/knowledgeGraph";
 import { filterSafe, isQueryBlocked } from "../services/safeSearch";
-import { Category, withTimeout } from "../connectors/types";
+import { Category, SearchItem, withTimeout } from "../connectors/types";
 
 const router = Router();
 
 const VALID_CATEGORIES: Category[] = ["images", "videos", "gifs", "models3d", "texts"];
+
+// Connectors that return a short authoritative definition rather than a general
+// article/media result. Pulled out of the grid so they can be shown as a dedicated
+// "Definizione" box instead of being just another card among dozens.
+const DICTIONARY_SOURCES = new Set(["Merriam-Webster", "Cambridge Dictionary", "Etymonline", "Treccani"]);
+
+// Round-robins across sources before capping, so a single source that returns lots of
+// entries (e.g. Etymonline) can't crowd out the others (e.g. Cambridge Dictionary) —
+// same fix as applied to graph relations, same reason: fair mix beats raw array order.
+function interleaveBySource(items: SearchItem[], cap: number): SearchItem[] {
+  const bySource = new Map<string, SearchItem[]>();
+  for (const item of items) {
+    if (!bySource.has(item.source)) bySource.set(item.source, []);
+    bySource.get(item.source)!.push(item);
+  }
+  const buckets = [...bySource.values()];
+  const result: SearchItem[] = [];
+  for (let i = 0; result.length < cap; i++) {
+    let addedAny = false;
+    for (const bucket of buckets) {
+      if (i < bucket.length) {
+        result.push(bucket[i]);
+        addedAny = true;
+        if (result.length >= cap) break;
+      }
+    }
+    if (!addedAny) break;
+  }
+  return result;
+}
 
 // Per-connector cutoff, bounds worst-case response time. 20s covers a scraping connector's
 // own worst case (15s page load + 5s selector wait) even when it has to queue for a Chrome tab.
@@ -73,8 +103,16 @@ router.get("/search", async (req: Request, res: Response) => {
       knowledgeGraph: {
         nodes: [],
         edges: [],
-        coverage: { sourcesQueried: 0, sourcesWithResults: 0, coveragePercent: 0, categories: [] },
+        coverage: {
+          sourcesQueried: 0,
+          sourcesAvailable: 0,
+          sourcesWithResults: 0,
+          coveragePercent: 0,
+          availabilityPercent: 0,
+          categories: [],
+        },
       },
+      definitions: [],
       items: [],
     });
   }
@@ -110,9 +148,15 @@ router.get("/search", async (req: Request, res: Response) => {
     : rawSources;
 
   const allItems = sources.flatMap((s) => s.items);
+  const definitions = interleaveBySource(allItems.filter((i) => DICTIONARY_SOURCES.has(i.source)), 6);
+  const items = allItems.filter((i) => !DICTIONARY_SOURCES.has(i.source));
   const errors = sources.filter((s) => s.error).map((s) => ({ source: s.source, error: s.error }));
 
-  const sourcesWithResults = sources.filter((s) => s.items.length > 0).length;
+  // "Available" = the connector actually ran (no missing key / timeout / HTTP error).
+  // Scoring coverage against only those isolates real content signal from our own
+  // infrastructure reliability — a missing API key shouldn't read as "less knowledge".
+  const sourcesAvailable = sources.filter((s) => !s.error).length;
+  const sourcesWithResults = sources.filter((s) => !s.error && s.items.length > 0).length;
   const categories = Array.from(new Set(allItems.map((i) => i.category)));
   const { nodes, edges } = buildGraphNodes(q, relatedTags, allItems);
 
@@ -132,14 +176,21 @@ router.get("/search", async (req: Request, res: Response) => {
       edges,
       coverage: {
         sourcesQueried: connectors.length,
+        sourcesAvailable,
         sourcesWithResults,
-        coveragePercent: connectors.length
-          ? Math.round((sourcesWithResults / connectors.length) * 100)
+        // Content signal: of the sources that actually responded, how many found something
+        coveragePercent: sourcesAvailable
+          ? Math.round((sourcesWithResults / sourcesAvailable) * 100)
+          : 0,
+        // Infrastructure signal: how many sources were configured & reachable at all
+        availabilityPercent: connectors.length
+          ? Math.round((sourcesAvailable / connectors.length) * 100)
           : 0,
         categories,
       },
     },
-    items: allItems,
+    definitions,
+    items,
   };
 
   setCached(key, body);
