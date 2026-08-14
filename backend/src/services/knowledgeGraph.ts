@@ -21,6 +21,11 @@ const FETCH_TIMEOUT_MS = 5000;
 const RELATIONS_CACHE_TTL_MS = 30 * 60 * 1000;
 const relationsCache = new Map<string, { relations: Relation[]; expiresAt: number }>();
 const NODE_CAP = 12; // "una decina" of related nodes shown per query, plus the root
+const RELATED_CAP = 7; // trigger/context words need more headroom than lexical relations
+// Per-word cap when a multi-word query falls back to per-word lookup: higher than RELATED_CAP
+// because each word's own list still wastes ~1 slot on the OTHER query word (e.g. "bonaparte"
+// shows up in "napoleon"'s own trigger list) before the outer merge filters it back out.
+const MULTIWORD_RELATED_CAP = 10;
 
 async function fetchJson(url: string): Promise<any | undefined> {
   const controller = new AbortController();
@@ -37,14 +42,16 @@ async function fetchJson(url: string): Promise<any | undefined> {
 }
 
 // Datamuse: no API key needed, more reliably up than ConceptNet. rel_* codes map to our taxonomy.
-async function fetchFromDatamuse(term: string): Promise<Relation[]> {
+async function fetchFromDatamuse(term: string, relatedCap: number = RELATED_CAP): Promise<Relation[]> {
   const encoded = encodeURIComponent(term);
-  // md=p: part-of-speech tags, used by ambiguityRank below
+  // md=p: part-of-speech tags, used by ambiguityRank below. rel_trg's own max is 15, not 6 like
+  // the others — it was cutting contextual words (e.g. "waterloo" for "napoleon") out of the
+  // pool entirely, before ranking/capping even got a chance to consider them.
   const [syn, gen, spc, trg] = await Promise.all([
     fetchJson(`https://api.datamuse.com/words?rel_syn=${encoded}&max=10&md=p`),
     fetchJson(`https://api.datamuse.com/words?rel_gen=${encoded}&max=8&md=p`),
     fetchJson(`https://api.datamuse.com/words?rel_spc=${encoded}&max=8&md=p`),
-    fetchJson(`https://api.datamuse.com/words?rel_trg=${encoded}&max=6&md=p`),
+    fetchJson(`https://api.datamuse.com/words?rel_trg=${encoded}&max=15&md=p`),
   ]);
 
   const relations: Relation[] = [];
@@ -83,7 +90,7 @@ async function fetchFromDatamuse(term: string): Promise<Relation[]> {
   addAll(syn, "synonym", 3);
   addAll(gen, "broader", 3);
   addAll(spc, "narrower", 3);
-  addAll(trg, "related", 4);
+  addAll(trg, "related", relatedCap);
 
   return relations;
 }
@@ -124,16 +131,17 @@ async function fetchFromConceptNet(term: string): Promise<Relation[]> {
   return relations;
 }
 
-async function getRelations(term: string): Promise<Relation[]> {
-  const cached = relationsCache.get(term);
+async function getRelations(term: string, relatedCap: number = RELATED_CAP): Promise<Relation[]> {
+  const cacheKey = `${term}::${relatedCap}`;
+  const cached = relationsCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.relations;
 
-  let relations = await fetchFromDatamuse(term);
+  let relations = await fetchFromDatamuse(term, relatedCap);
   if (relations.length === 0) relations = await fetchFromConceptNet(term);
 
   // Only cache real results, so a failure doesn't parrot the outage for the full TTL
   if (relations.length > 0) {
-    relationsCache.set(term, { relations, expiresAt: Date.now() + RELATIONS_CACHE_TTL_MS });
+    relationsCache.set(cacheKey, { relations, expiresAt: Date.now() + RELATIONS_CACHE_TTL_MS });
   }
   return relations;
 }
@@ -166,7 +174,7 @@ export async function getRelatedTags(query: string): Promise<RelatedTag[]> {
   // Multi-word queries rarely match as a single unit — fall back to per-word lookup, merged
   if (relations.length === 0 && term.includes(" ")) {
     const words = term.split(/\s+/).filter((w) => w.length > 2 && !STOPWORDS.has(w));
-    const perWord = await Promise.all(words.map((w) => getRelations(w)));
+    const perWord = await Promise.all(words.map((w) => getRelations(w, MULTIWORD_RELATED_CAP)));
     const seen = new Set<string>([term, ...words]);
     const cursors = perWord.map(() => 0);
     relations = [];
