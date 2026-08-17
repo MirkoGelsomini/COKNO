@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, safeResult, fetchJsonConnector } from "../types";
 
 const europeana: Connector = {
   name: "Europeana",
@@ -9,16 +9,12 @@ const europeana: Connector = {
     const key = process.env.EUROPEANA_API_KEY;
     if (!key) return safeResult("Europeana", "EUROPEANA_API_KEY not set");
 
-    try {
-      const start = (page - 1) * 12 + 1;
-      const url =
-        `https://api.europeana.eu/record/v2/search.json?wskey=${key}` +
-        `&query=${encodeURIComponent(query)}&rows=12&start=${start}` +
-        `&reusability=open&media=true&qf=TYPE%3AIMAGE`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
+    const start = (page - 1) * 12 + 1;
+    const url =
+      `https://api.europeana.eu/record/v2/search.json?wskey=${key}` +
+      `&query=${encodeURIComponent(query)}&rows=12&start=${start}` +
+      `&reusability=open&media=true&qf=TYPE%3AIMAGE`;
+    return fetchJsonConnector("Europeana", url, (data) => {
       const items = (data.items ?? [])
         .map((item: any) => {
           const thumb = item.edmPreview?.[0];
@@ -35,11 +31,8 @@ const europeana: Connector = {
           };
         })
         .filter(Boolean);
-
-      return { source: "Europeana", total: data.totalResults ?? items.length, items };
-    } catch (err) {
-      return safeResult("Europeana", err);
-    }
+      return { total: data.totalResults ?? items.length, items };
+    });
   },
 };
 

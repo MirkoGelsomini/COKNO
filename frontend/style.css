@@ -381,10 +381,26 @@ main {
 .trail-clear-btn:hover { border-color: #666; color: #ccc; }
 
 #trail-path {
+  overflow-x: auto;
+}
+
+.trail-tree {
+  list-style: none;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Any <ul> nested inside .trail-tree is a branch, indented under its parent chip */
+.trail-tree ul {
+  list-style: none;
+  margin-top: 0.5rem;
+  margin-left: 1.4rem;
+  padding-left: 1rem;
+  border-left: 1px dashed #333;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .trail-chip {
@@ -703,6 +719,49 @@ main {
   margin-left: 0.25rem;
 }
 
+#concept-path-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #222;
+}
+
+#concept-path-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#concept-path-input {
+  flex: 1;
+  padding: 0.45rem 0.8rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 20px;
+  color: #eee;
+  font-size: 0.82rem;
+  outline: none;
+}
+#concept-path-input:focus { border-color: #666; }
+
+#concept-path-form button {
+  padding: 0.45rem 0.9rem;
+  background: #fff;
+  color: #000;
+  border: none;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#concept-path-form button:hover { background: #ddd; }
+
+#concept-path-result {
+  margin-top: 0.7rem;
+  font-size: 0.82rem;
+  color: #999;
+  line-height: 2;
+}
+
 /* --- Result detail modal --- */
 .modal {
   position: fixed;
@@ -897,6 +956,22 @@ main {
 }
 
 #concept-modal-related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.concept-order-group { margin-bottom: 1rem; }
+.concept-order-group:last-child { margin-bottom: 0; }
+
+.concept-order-group h4 {
+  font-size: 0.78rem;
+  color: #888;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.concept-order-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;

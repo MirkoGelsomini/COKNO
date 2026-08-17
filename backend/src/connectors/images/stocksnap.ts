@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const stocksnap: Connector = {
   name: "StockSnap",
@@ -8,12 +7,9 @@ const stocksnap: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://stocksnap.io/search/${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/photo/']");
-      const $ = cheerio.load(html);
+    const url = `https://stocksnap.io/search/${encodeURIComponent(query)}`;
+    return scrapeConnector("StockSnap", scrapePage(url, "a[href*='/photo/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/photo/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,11 +26,8 @@ const stocksnap: Connector = {
           });
         }
       });
-
-      return { source: "StockSnap", total: items.length, items };
-    } catch (err) {
-      return safeResult("StockSnap", err);
-    }
+      return items;
+    });
   },
 };
 

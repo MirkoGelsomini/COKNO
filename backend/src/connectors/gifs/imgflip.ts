@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const imgflip: Connector = {
   name: "Imgflip",
@@ -8,12 +7,9 @@ const imgflip: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://imgflip.com/gif-search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, ".gif-wrap");
-      const $ = cheerio.load(html);
+    const url = `https://imgflip.com/gif-search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Imgflip", scrapePage(url, ".gif-wrap"), ($) => {
       const items: any[] = [];
-
       $(".gif-wrap a[href*='/gif/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const imgflip: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Imgflip", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Imgflip", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

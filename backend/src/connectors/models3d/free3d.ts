@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const free3d: Connector = {
   name: "Free3D",
@@ -8,12 +7,9 @@ const free3d: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://free3d.com/3d-models/?s=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/3d-model/']");
-      const $ = cheerio.load(html);
+    const url = `https://free3d.com/3d-models/?s=${encodeURIComponent(query)}`;
+    return scrapeConnector("Free3D", scrapePage(url, "a[href*='/3d-model/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/3d-model/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const free3d: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Free3D", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Free3D", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

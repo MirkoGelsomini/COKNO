@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, safeResult, fetchJsonConnector } from "../types";
 
 const tenor: Connector = {
   name: "Tenor",
@@ -9,29 +9,20 @@ const tenor: Connector = {
     const key = process.env.TENOR_API_KEY;
     if (!key) return safeResult("Tenor", "TENOR_API_KEY not set");
 
-    try {
-      const pos = (page - 1) * 12;
-      const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${key}&limit=12&pos=${pos}&contentfilter=${safe ? "high" : "off"}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      return {
+    const pos = (page - 1) * 12;
+    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${key}&limit=12&pos=${pos}&contentfilter=${safe ? "high" : "off"}`;
+    return fetchJsonConnector("Tenor", url, (data) => ({
+      total: 0,
+      items: (data.results ?? []).map((g: any) => ({
+        id: g.id,
+        title: g.content_description || "Tenor GIF",
+        url: `https://tenor.com/view/${g.id}`,
+        thumbnailUrl: g.media_formats?.tinygif?.url,
         source: "Tenor",
-        total: 0,
-        items: (data.results ?? []).map((g: any) => ({
-          id: g.id,
-          title: g.content_description || "Tenor GIF",
-          url: `https://tenor.com/view/${g.id}`,
-          thumbnailUrl: g.media_formats?.tinygif?.url,
-          source: "Tenor",
-          category: "gifs",
-          tags: g.tags ?? [],
-        })),
-      };
-    } catch (err) {
-      return safeResult("Tenor", err);
-    }
+        category: "gifs",
+        tags: g.tags ?? [],
+      })),
+    }));
   },
 };
 

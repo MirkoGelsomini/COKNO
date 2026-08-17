@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const behance: Connector = {
   name: "Behance",
@@ -8,12 +7,9 @@ const behance: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.behance.net/search/projects?search=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/gallery/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.behance.net/search/projects?search=${encodeURIComponent(query)}`;
+    return scrapeConnector("Behance", scrapePage(url, "a[href*='/gallery/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/gallery/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/gallery\/\d+/)) return;
@@ -33,12 +29,8 @@ const behance: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Behance", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Behance", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

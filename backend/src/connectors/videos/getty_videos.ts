@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 function titleFromSlug(href: string): string {
   const match = href.match(/\/detail\/video\/([^/]+)\/\d+/);
@@ -15,12 +14,9 @@ const gettyVideos: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.gettyimages.com/videos/${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://www.gettyimages.com/videos/${encodeURIComponent(query)}`;
+    return scrapeConnector("Getty Videos", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("a[href*='/detail/video/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -41,12 +37,8 @@ const gettyVideos: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Getty Videos", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Getty Videos", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

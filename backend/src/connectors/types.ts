@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 export type Category = "images" | "videos" | "gifs" | "models3d" | "texts";
 
 export interface SearchItem {
@@ -32,6 +34,42 @@ export const USER_AGENT =
 export function safeResult(source: string, err: unknown): ConnectorResult {
   const message = err instanceof Error ? err.message : String(err);
   return { items: [], total: 0, source, error: message };
+}
+
+// Every "api"-type connector was hand-writing the same fetch/check/parse/catch shell around
+// its own URL and its own JSON-to-SearchItem mapping. This keeps that one-off logic — the
+// only part that actually differs per source — inline at the call site, and shares the rest.
+export async function fetchJsonConnector(
+  source: string,
+  url: string,
+  extract: (data: any) => { total: number; items: SearchItem[] },
+  init?: RequestInit
+): Promise<ConnectorResult> {
+  try {
+    const res = await fetch(url, init);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return { source, ...extract(data) };
+  } catch (err) {
+    return safeResult(source, err);
+  }
+}
+
+// Same idea for "scraping"-type connectors: the caller fetches the HTML however it needs to
+// (plainFetchPage or the shared-tab-pool scrapePage) and does its own cheerio selectors —
+// this only wraps the load/try-catch/result-shape that was identical across every one of them.
+export async function scrapeConnector(
+  source: string,
+  html: Promise<string> | string,
+  build: ($: cheerio.CheerioAPI) => SearchItem[]
+): Promise<ConnectorResult> {
+  try {
+    const $ = cheerio.load(await html);
+    const items = build($);
+    return { source, total: items.length, items };
+  } catch (err) {
+    return safeResult(source, err);
+  }
 }
 
 // Bounds a connector call so a slow source can't hold up the whole response

@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const thangs: Connector = {
   name: "Thangs",
@@ -8,12 +7,9 @@ const thangs: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://thangs.com/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/model/'], a[href*='/thangs/']");
-      const $ = cheerio.load(html);
+    const url = `https://thangs.com/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Thangs", scrapePage(url, "a[href*='/model/'], a[href*='/thangs/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/model/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const thangs: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Thangs", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Thangs", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

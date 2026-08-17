@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
 
 const doaj: Connector = {
   name: "DOAJ",
@@ -6,37 +6,27 @@ const doaj: Connector = {
   type: "api",
 
   async search(query, page = 1): Promise<ConnectorResult> {
-    try {
-      const url =
-        `https://doaj.org/api/search/articles/${encodeURIComponent(query)}` +
-        `?pageSize=12&page=${page}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      const results = data.results ?? [];
-
-      const items = results
+    const url =
+      `https://doaj.org/api/search/articles/${encodeURIComponent(query)}` +
+      `?pageSize=12&page=${page}`;
+    return fetchJsonConnector("DOAJ", url, (data) => {
+      const items = (data.results ?? [])
         .filter((r: any) => r.bibjson?.title)
         .map((r: any) => {
           const bib = r.bibjson;
           const link = bib.link?.find((l: any) => l.type === "fulltext") ?? bib.link?.[0];
-          const author = bib.author?.[0]?.name;
           return {
             id: r.id,
             title: bib.title,
             url: link?.url ?? `https://doaj.org/article/${r.id}`,
             description: bib.abstract ? bib.abstract.slice(0, 200) + "…" : undefined,
-            author,
+            author: bib.author?.[0]?.name,
             source: "DOAJ",
             category: "texts",
           };
         });
-
-      return { source: "DOAJ", total: data.total?.value ?? data.total ?? items.length, items };
-    } catch (err) {
-      return safeResult("DOAJ", err);
-    }
+      return { total: data.total?.value ?? data.total ?? items.length, items };
+    });
   },
 };
 

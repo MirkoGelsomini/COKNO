@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const gifimage: Connector = {
   name: "GifImage",
@@ -8,12 +7,9 @@ const gifimage: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://gifimage.net/?s=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "article, .post");
-      const $ = cheerio.load(html);
+    const url = `https://gifimage.net/?s=${encodeURIComponent(query)}`;
+    return scrapeConnector("GifImage", scrapePage(url, "article, .post"), ($) => {
       const items: any[] = [];
-
       $("article a[href], .post a[href]").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("gifimage.net")) return;
@@ -31,12 +27,8 @@ const gifimage: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "GifImage", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("GifImage", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

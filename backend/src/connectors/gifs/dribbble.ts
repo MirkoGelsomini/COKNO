@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const dribbble: Connector = {
   name: "Dribbble",
@@ -8,12 +7,9 @@ const dribbble: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://dribbble.com/shots?q=${encodeURIComponent(query)}&animated=true`;
-      const html = await scrapePage(url, "a[href*='/shots/']");
-      const $ = cheerio.load(html);
+    const url = `https://dribbble.com/shots?q=${encodeURIComponent(query)}&animated=true`;
+    return scrapeConnector("Dribbble", scrapePage(url, "a[href*='/shots/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/shots/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/shots\/\d+/)) return;
@@ -31,12 +27,8 @@ const dribbble: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Dribbble", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Dribbble", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

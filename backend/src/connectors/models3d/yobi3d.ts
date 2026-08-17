@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const yobi3d: Connector = {
   name: "Yobi3D",
@@ -8,12 +7,9 @@ const yobi3d: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.yobi3d.com/q/${encodeURIComponent(query)}/`;
-      const html = await scrapePage(url, ".result-item, a[href*='/f/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.yobi3d.com/q/${encodeURIComponent(query)}/`;
+    return scrapeConnector("Yobi3D", scrapePage(url, ".result-item, a[href*='/f/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/f/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const yobi3d: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Yobi3D", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Yobi3D", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

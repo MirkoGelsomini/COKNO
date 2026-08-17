@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const khanacademy: Connector = {
   name: "Khan Academy",
@@ -8,12 +7,9 @@ const khanacademy: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.khanacademy.org/search?page_search_query=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/v/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.khanacademy.org/search?page_search_query=${encodeURIComponent(query)}`;
+    return scrapeConnector("Khan Academy", scrapePage(url, "a[href*='/v/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/v/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("/v/")) return;
@@ -31,12 +27,8 @@ const khanacademy: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Khan Academy", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Khan Academy", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const turbosquid: Connector = {
   name: "TurboSquid",
@@ -8,12 +7,9 @@ const turbosquid: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.turbosquid.com/Search/3D-Models/free/${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, ".product-card, a[href*='/3d-models/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.turbosquid.com/Search/3D-Models/free/${encodeURIComponent(query)}`;
+    return scrapeConnector("TurboSquid", scrapePage(url, ".product-card, a[href*='/3d-models/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/3d-models/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/3d-models\/[^/]+-\d+/)) return;
@@ -31,12 +27,8 @@ const turbosquid: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "TurboSquid", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("TurboSquid", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

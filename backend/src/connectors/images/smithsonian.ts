@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, safeResult, fetchJsonConnector } from "../types";
 
 const smithsonian: Connector = {
   name: "Smithsonian",
@@ -9,18 +9,12 @@ const smithsonian: Connector = {
     const key = process.env.SMITHSONIAN_API_KEY;
     if (!key) return safeResult("Smithsonian", "SMITHSONIAN_API_KEY not set");
 
-    try {
-      const start = (page - 1) * 12;
-      const url =
-        `https://api.si.edu/openaccess/api/v1.0/search` +
-        `?api_key=${key}&q=${encodeURIComponent(query)}&rows=12&start=${start}&online_media_type=Images`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      const rows = data.response?.rows ?? [];
-
-      const items = rows
+    const start = (page - 1) * 12;
+    const url =
+      `https://api.si.edu/openaccess/api/v1.0/search` +
+      `?api_key=${key}&q=${encodeURIComponent(query)}&rows=12&start=${start}&online_media_type=Images`;
+    return fetchJsonConnector("Smithsonian", url, (data) => {
+      const items = (data.response?.rows ?? [])
         .map((row: any) => {
           const dnr = row.content?.descriptiveNonRepeating;
           const media = dnr?.online_media?.media?.[0];
@@ -35,11 +29,8 @@ const smithsonian: Connector = {
           };
         })
         .filter(Boolean);
-
-      return { source: "Smithsonian", total: data.response?.rowCount ?? items.length, items };
-    } catch (err) {
-      return safeResult("Smithsonian", err);
-    }
+      return { total: data.response?.rowCount ?? items.length, items };
+    });
   },
 };
 

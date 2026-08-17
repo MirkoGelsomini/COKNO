@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
 
 const polyhaven: Connector = {
   name: "Poly Haven",
@@ -6,13 +6,8 @@ const polyhaven: Connector = {
   type: "api",
 
   async search(query, page = 1): Promise<ConnectorResult> {
-    try {
-      const res = await fetch("https://api.polyhaven.com/assets?t=models");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
+    return fetchJsonConnector("Poly Haven", "https://api.polyhaven.com/assets?t=models", (data) => {
       const terms = query.toLowerCase().split(/\s+/);
-
       const matched = Object.entries(data)
         .filter(([slug, asset]: [string, any]) => {
           const text = `${slug} ${asset.name ?? ""} ${(asset.tags ?? []).join(" ")} ${(asset.categories ?? []).join(" ")}`.toLowerCase();
@@ -20,20 +15,17 @@ const polyhaven: Connector = {
         })
         .map(([slug, asset]: [string, any]) => ({
           id: slug,
-          title: (asset as any).name ?? slug,
+          title: asset.name ?? slug,
           url: `https://polyhaven.com/a/${slug}`,
           thumbnailUrl: `https://cdn.polyhaven.com/asset_img/thumbs/${slug}.png?height=200`,
-          tags: (asset as any).tags ?? [],
+          tags: asset.tags ?? [],
           source: "Poly Haven",
           category: "models3d" as const,
         }));
 
       const pageSize = 12;
-      const slice = matched.slice((page - 1) * pageSize, page * pageSize);
-      return { source: "Poly Haven", total: matched.length, items: slice };
-    } catch (err) {
-      return safeResult("Poly Haven", err);
-    }
+      return { total: matched.length, items: matched.slice((page - 1) * pageSize, page * pageSize) };
+    });
   },
 };
 

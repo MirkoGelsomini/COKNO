@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const stlfinder: Connector = {
   name: "STLfinder",
@@ -8,12 +7,9 @@ const stlfinder: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.stlfinder.com/3dmodels/${encodeURIComponent(query)}/`;
-      const html = await scrapePage(url, ".model-item, a[href*='/model/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.stlfinder.com/3dmodels/${encodeURIComponent(query)}/`;
+    return scrapeConnector("STLfinder", scrapePage(url, ".model-item, a[href*='/model/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/model/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const stlfinder: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "STLfinder", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("STLfinder", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

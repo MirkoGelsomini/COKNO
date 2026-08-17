@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const gifcities: Connector = {
   name: "GifCities",
@@ -8,12 +7,9 @@ const gifcities: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://gifcities.org/?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "img");
-      const $ = cheerio.load(html);
+    const url = `https://gifcities.org/?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("GifCities", scrapePage(url, "img"), ($) => {
       const items: any[] = [];
-
       $("img").each((_, el) => {
         const src = $(el).attr("src") ?? "";
         const alt = $(el).attr("alt") || "";
@@ -28,11 +24,8 @@ const gifcities: Connector = {
           });
         }
       });
-
-      return { source: "GifCities", total: items.length, items };
-    } catch (err) {
-      return safeResult("GifCities", err);
-    }
+      return items;
+    });
   },
 };
 

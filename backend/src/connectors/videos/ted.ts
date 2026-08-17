@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const ted: Connector = {
   name: "TED Talks",
@@ -8,12 +7,9 @@ const ted: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.ted.com/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/talks/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.ted.com/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("TED Talks", scrapePage(url, "a[href*='/talks/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/talks/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/talks\/[a-z0-9_-]+/)) return;
@@ -31,12 +27,8 @@ const ted: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "TED Talks", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("TED Talks", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

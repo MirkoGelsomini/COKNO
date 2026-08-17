@@ -18,14 +18,18 @@ let graphState = null; // { rootId, rootQuery, selectedId, nodesById: Map<id, no
 const EXPAND_CHILD_CAP = 6; // new nodes added per "Espandi nel grafo" click
 const GRAPH_NODE_CAP = 40; // total nodes across all levels before further expansion is blocked
 
+function resetPaging() {
+  currentPage = 1;
+  subPage = 0;
+  displayPage = 1;
+}
+
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentCategory = btn.dataset.category;
-    currentPage = 1;
-    subPage = 0;
-    displayPage = 1;
+    resetPaging();
     if (currentQuery) runSearch();
   });
 });
@@ -35,9 +39,7 @@ document.getElementById("search-form").addEventListener("submit", (e) => {
   const q = document.getElementById("query-input").value.trim();
   if (!q) return;
   currentQuery = q;
-  currentPage = 1;
-  subPage = 0;
-  displayPage = 1;
+  resetPaging();
   runSearch();
 });
 
@@ -47,9 +49,7 @@ const storedSafe = localStorage.getItem("safeSearch");
 safeCheckbox.checked = storedSafe === null ? true : storedSafe === "true";
 safeCheckbox.addEventListener("change", () => {
   localStorage.setItem("safeSearch", String(safeCheckbox.checked));
-  currentPage = 1;
-  subPage = 0;
-  displayPage = 1;
+  resetPaging();
   if (currentQuery) runSearch();
 });
 
@@ -85,7 +85,7 @@ async function runSearch() {
     renderResultsSlice();
 
     if (data.blockedQuery) {
-      setStatus("Questa ricerca è bloccata dalla Safe Search. Disattivala per procedere comunque.");
+      setStatus("This search is blocked by Safe Search. Turn it off to proceed anyway.");
     } else {
       setStatus(data.items.length === 0 ? "No results found." : "");
     }
@@ -130,6 +130,10 @@ function appendToTrail(query, totalItems, nav) {
   return trail;
 }
 
+// Renders the trail as a tree (nested lists) instead of one flat chronological strip — a
+// linear strip loses the shape of the session the moment you go back and take a different
+// branch from an earlier concept. Every entry already carries a `cameFrom`, so building the
+// tree is just linking each one to the most recent earlier entry with that query text.
 function renderTrail(trail) {
   const section = document.getElementById("trail-section");
   const path = document.getElementById("trail-path");
@@ -141,24 +145,50 @@ function renderTrail(trail) {
   section.classList.remove("hidden");
   path.innerHTML = "";
 
+  const children = trail.map(() => []);
+  const roots = [];
   trail.forEach((entry, i) => {
-    const prev = trail[i - 1];
-    const isContinuation = prev && entry.cameFrom && entry.cameFrom.toLowerCase() === prev.query.toLowerCase();
-
-    if (i > 0) {
-      const connector = document.createElement("span");
-      connector.className = isContinuation ? `trail-connector rel-${entry.relation}` : "trail-connector trail-break";
-      connector.textContent = isContinuation ? `→ ${entry.relation}` : "•";
-      path.appendChild(connector);
+    let parentIndex = -1;
+    if (entry.cameFrom) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (trail[j].query.toLowerCase() === entry.cameFrom.toLowerCase()) {
+          parentIndex = j;
+          break;
+        }
+      }
     }
+    (parentIndex >= 0 ? children[parentIndex] : roots).push(i);
+  });
 
+  const renderNode = (i) => {
+    const entry = trail[i];
+    const li = document.createElement("li");
     const chip = document.createElement("button");
     chip.className = "trail-chip";
     chip.innerHTML = `${escapeHtml(entry.query)} <span class="node-count">${entry.totalItems}</span>`;
     chip.title = new Date(entry.timestamp).toLocaleString();
     chip.addEventListener("click", () => searchTag(entry.query));
-    path.appendChild(chip);
-  });
+    li.appendChild(chip);
+
+    if (children[i].length) {
+      const ul = document.createElement("ul");
+      children[i].forEach((childIndex) => {
+        const childLi = renderNode(childIndex);
+        const relLabel = document.createElement("span");
+        relLabel.className = `trail-connector rel-${trail[childIndex].relation}`;
+        relLabel.textContent = `→ ${trail[childIndex].relation} `;
+        childLi.insertBefore(relLabel, childLi.firstChild);
+        ul.appendChild(childLi);
+      });
+      li.appendChild(ul);
+    }
+    return li;
+  };
+
+  const rootUl = document.createElement("ul");
+  rootUl.className = "trail-tree";
+  roots.forEach((i) => rootUl.appendChild(renderNode(i)));
+  path.appendChild(rootUl);
 }
 
 document.getElementById("trail-clear").addEventListener("click", () => {
@@ -189,9 +219,9 @@ function renderPaginationControls() {
 
   el.classList.remove("hidden");
   el.innerHTML = `
-    <button class="page-btn" id="page-prev" ${isFirst ? "disabled" : ""}>‹ Precedente</button>
+    <button class="page-btn" id="page-prev" ${isFirst ? "disabled" : ""}>‹ Previous</button>
     <span class="page-btn active">${displayPage}</span>
-    <button class="page-btn" id="page-next" ${canGoNext ? "" : "disabled"}>Successiva ›</button>
+    <button class="page-btn" id="page-next" ${canGoNext ? "" : "disabled"}>Next ›</button>
   `;
 
   document.getElementById("page-prev").addEventListener("click", goPrevPage);
@@ -236,7 +266,7 @@ function renderMeta(data) {
   const sources = data.sources ?? []; // collapsed behind a <details>, up to 99 sources for "All"
   const withResults = sources.filter((s) => !s.error && s.count > 0).length;
   document.getElementById("source-summary").textContent =
-    `${withResults}/${sources.length} fonti con risultati ▾`;
+    `${withResults}/${sources.length} sources with results ▾`;
 
   const badges = document.getElementById("source-badges");
   badges.innerHTML = "";
@@ -273,7 +303,7 @@ function definitionCardsHtml(definitions) {
       <div class="definition-source">${escapeHtml(d.source)}</div>
       <div class="definition-title">${escapeHtml(d.title)}</div>
       ${d.description ? `<p class="definition-text">${escapeHtml(d.description)}</p>` : ""}
-      <a class="definition-link" href="${d.url}" target="_blank" rel="noopener">Apri su ${escapeHtml(d.source)} ↗</a>
+      <a class="definition-link" href="${d.url}" target="_blank" rel="noopener">Open on ${escapeHtml(d.source)} ↗</a>
     </div>
   `).join("");
 }
@@ -286,7 +316,7 @@ function renderSpellingSuggestion(suggestion) {
     return;
   }
   el.classList.remove("hidden");
-  el.innerHTML = `Forse intendevi: <button class="spelling-suggestion-btn">${escapeHtml(suggestion)}</button>?`;
+  el.innerHTML = `Did you mean: <button class="spelling-suggestion-btn">${escapeHtml(suggestion)}</button>?`;
   el.querySelector(".spelling-suggestion-btn").addEventListener("click", () => searchTag(suggestion));
 }
 
@@ -308,9 +338,7 @@ function renderDefinitions(definitions) {
 function searchTag(tag, fromQuery, relation) {
   document.getElementById("query-input").value = tag;
   currentQuery = tag;
-  currentPage = 1;
-  subPage = 0;
-  displayPage = 1;
+  resetPaging();
   pendingNavigation = fromQuery ? { from: fromQuery, relation } : null;
   runSearch();
 }
@@ -318,8 +346,10 @@ function searchTag(tag, fromQuery, relation) {
 // --- Knowledge Map ---
 // Mirrors backend/textRelevance.ts, so nodes added by expanding a branch can compute their
 // own match count against resultPool client-side, the same way the server does.
+// Kept in sync with backend/services/textRelevance.ts's sameStem — see its comment for why
+// the cap is 6, not 4 (avoids collisions like "principia" ~ "prince" on a shared "prin").
 function sameStemJS(a, b) {
-  const n = Math.min(a.length, b.length, 4);
+  const n = Math.min(a.length, b.length, 6);
   return n >= 3 && a.slice(0, n) === b.slice(0, n);
 }
 function wordsJS(text) {
@@ -349,6 +379,8 @@ function renderGraph(graph, query) {
   expandCache = {};
   detail.classList.add("hidden");
   detail.innerHTML = "";
+  document.getElementById("concept-path-input").value = "";
+  document.getElementById("concept-path-result").innerHTML = "";
 
   if (!graph || !graph.nodes?.length) {
     section.classList.add("hidden");
@@ -361,10 +393,10 @@ function renderGraph(graph, query) {
   // separate so a missing API key doesn't read as "topic isn't well documented"
   const { coveragePercent, sourcesWithResults, sourcesAvailable, sourcesQueried, availabilityPercent, categories } = graph.coverage;
   coverageBadge.innerHTML = `
-    <span class="coverage-label">Grado di conoscenza</span>
+    <span class="coverage-label">Knowledge level</span>
     <div class="coverage-bar"><div class="coverage-fill" style="width:${coveragePercent}%"></div></div>
-    <span class="coverage-value">${coveragePercent}% · ${sourcesWithResults}/${sourcesAvailable} fonti disponibili · ${categories.length} categorie</span>
-    <span class="coverage-availability" title="Fonti configurate e raggiungibili in questa ricerca, a prescindere dal contenuto trovato">${sourcesAvailable}/${sourcesQueried} fonti raggiungibili (${availabilityPercent}%)</span>
+    <span class="coverage-value">${coveragePercent}% · ${sourcesWithResults}/${sourcesAvailable} sources with content · ${categories.length} categories</span>
+    <span class="coverage-availability" title="Sources configured and reachable for this search, regardless of content found">${sourcesAvailable}/${sourcesQueried} sources reachable (${availabilityPercent}%)</span>
   `;
 
   const rootData = graph.nodes.find((n) => n.relation === "root");
@@ -511,8 +543,8 @@ function makeGraphNode(node, x, y, rootQuery) {
     ? escapeHtml(node.label)
     : `${escapeHtml(node.label)}${freqBadge}${countBadge}`;
   el.title = node.relation === "root"
-    ? "Query corrente"
-    : `${node.relation}${node.frequency != null ? ` — ${node.frequency}% frequenza` : ""} — ${node.matchCount} risultat${node.matchCount === 1 ? "o" : "i"} corrente${node.matchCount === 1 ? "" : "i"}`;
+    ? "Current query"
+    : `${node.relation}${node.frequency != null ? ` — ${node.frequency}% frequency` : ""} — ${node.matchCount} current result${node.matchCount === 1 ? "" : "s"}`;
 
   if (node.relation === "root") {
     el.classList.add("root");
@@ -535,29 +567,45 @@ function makeGraphNode(node, x, y, rootQuery) {
   return el;
 }
 
+// Fetched by both showGraphDetail (to list a node's relations) and toggleExpandNode (to turn
+// them into child nodes) — cached once per label so selecting then expanding the same node
+// doesn't double-fetch.
+async function fetchExpansion(label) {
+  if (expandCache[label]) return expandCache[label];
+  try {
+    const res = await fetch(`${API_BASE}/graph/expand?tag=${encodeURIComponent(label)}`);
+    expandCache[label] = await res.json();
+  } catch {
+    return { relatedTags: [] };
+  }
+  return expandCache[label];
+}
+
 // Materializes a node's related tags as child nodes (capped at EXPAND_CHILD_CAP); toggling
 // an already-expanded node collapses its branch instead
+// The radial layout re-centers on the root and grows on every render, so a node expanded
+// far from the root can land its new children well outside the current scroll position with
+// no visual cue anything happened. Re-center the viewport on the node that was just
+// expanded/collapsed once the new layout has painted.
+function scrollExpandedNodeIntoView() {
+  requestAnimationFrame(() => {
+    document.querySelector(".graph-node.selected")
+      ?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  });
+}
+
 async function toggleExpandNode(node) {
   if (node.expanded) {
     collapseBranch(node);
     renderGraphDOM();
     showGraphDetail(node, graphState.rootQuery);
+    scrollExpandedNodeIntoView();
     return;
   }
 
   if (graphState.nodesById.size >= GRAPH_NODE_CAP) return;
 
-  let data = expandCache[node.label];
-  if (!data) {
-    try {
-      const res = await fetch(`${API_BASE}/graph/expand?tag=${encodeURIComponent(node.label)}`);
-      data = await res.json();
-      expandCache[node.label] = data;
-    } catch {
-      data = { relatedTags: [] };
-    }
-  }
-
+  const data = await fetchExpansion(node.label);
   const existingIds = new Set(graphState.nodesById.keys());
   const candidates = (data.relatedTags ?? [])
     .filter((t) => t.tag !== graphState.rootQuery.toLowerCase() && t.tag !== node.id && !existingIds.has(t.tag))
@@ -578,6 +626,7 @@ async function toggleExpandNode(node) {
   node.expanded = true;
   renderGraphDOM();
   showGraphDetail(node, graphState.rootQuery);
+  scrollExpandedNodeIntoView();
 }
 
 function collapseBranch(node) {
@@ -597,7 +646,7 @@ function applyGraphFilter(node) {
   renderResults(filtered, currentCategory);
   renderFilterBanner();
   document.getElementById("pagination").classList.add("hidden");
-  setStatus(filtered.length === 0 ? `Nessun risultato di questa ricerca è taggato con "${node.label}".` : "");
+  setStatus(filtered.length === 0 ? `No result from this search is tagged with "${node.label}".` : "");
 }
 
 function clearGraphFilter() {
@@ -610,7 +659,7 @@ function clearGraphFilter() {
 function renderFilterBanner() {
   const el = document.getElementById("result-filter-banner");
   el.classList.remove("hidden");
-  el.innerHTML = `Mostrando solo i risultati per <strong>${escapeHtml(activeFilter.label)}</strong> <button id="clear-filter-btn">Mostra tutti</button>`;
+  el.innerHTML = `Showing only results for <strong>${escapeHtml(activeFilter.label)}</strong> <button id="clear-filter-btn">Show all</button>`;
   document.getElementById("clear-filter-btn").addEventListener("click", () => {
     if (graphState) graphState.selectedId = null;
     document.querySelectorAll(".graph-node.selected").forEach((n) => n.classList.remove("selected"));
@@ -622,42 +671,30 @@ function renderFilterBanner() {
 async function showGraphDetail(node, rootQuery) {
   const detail = document.getElementById("graph-detail");
   detail.classList.remove("hidden");
-  detail.innerHTML = `<p class="graph-detail-loading">Caricamento relazioni per "${escapeHtml(node.label)}"…</p>`;
+  detail.innerHTML = `<p class="graph-detail-loading">Loading relations for "${escapeHtml(node.label)}"…</p>`;
 
-  let data = expandCache[node.label];
-  if (!data) {
-    try {
-      const res = await fetch(`${API_BASE}/graph/expand?tag=${encodeURIComponent(node.label)}`);
-      data = await res.json();
-      expandCache[node.label] = data;
-    } catch {
-      data = { relatedTags: [] };
-    }
-  }
-
+  const data = await fetchExpansion(node.label);
   const relTags = (data.relatedTags ?? []).filter((t) => t.tag !== rootQuery.toLowerCase());
   const chips = relTags.length
-    ? relTags.map(
-        (t) => `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}${t.frequency != null ? ` <span class="node-freq">${t.frequency}%</span>` : ""}</button>`
-      ).join("")
-    : `<span class="graph-detail-empty">Nessuna relazione ulteriore trovata.</span>`;
+    ? relTags.map((t) => tagChipHtml(t, t.frequency != null ? ` <span class="node-freq">${t.frequency}%</span>` : "")).join("")
+    : `<span class="graph-detail-empty">No further relations found.</span>`;
 
   const matchInfo = node.matchCount > 0
-    ? `<span class="match-info match-yes">Presente in ${node.matchCount} risultat${node.matchCount === 1 ? "o" : "i"} di questa ricerca</span>`
-    : `<span class="match-info match-no">Nessun risultato attuale è taggato con questo termine</span>`;
+    ? `<span class="match-info match-yes">Present in ${node.matchCount} result${node.matchCount === 1 ? "" : "s"} of this search</span>`
+    : `<span class="match-info match-no">No current result is tagged with this term</span>`;
 
   const freqInfo = node.frequency != null
-    ? `<span class="match-info freq-info">${node.frequency}% frequenza rispetto al termine più comune della stessa categoria</span>`
+    ? `<span class="match-info freq-info">${node.frequency}% frequency relative to the most common term in the same category</span>`
     : "";
 
   const existingIds = new Set(graphState.nodesById.keys());
   const expandableCount = relTags.filter((t) => t.tag !== node.id && !existingIds.has(t.tag)).length;
   const atCap = !node.expanded && graphState.nodesById.size >= GRAPH_NODE_CAP;
   const expandLabel = node.expanded
-    ? "− Comprimi ramo"
+    ? "− Collapse branch"
     : atCap
-    ? "Mappa piena (40 nodi)"
-    : `+ Espandi nel grafo (${Math.min(expandableCount, EXPAND_CHILD_CAP)})`;
+    ? "Map full (40 nodes)"
+    : `+ Expand in graph (${Math.min(expandableCount, EXPAND_CHILD_CAP)})`;
   const expandDisabled = atCap || (!node.expanded && expandableCount === 0);
   const expandBtn = node.relation === "root" ? "" : `
       <button class="graph-detail-expand${node.expanded ? " expanded" : ""}" ${expandDisabled ? "disabled" : ""}>${expandLabel}</button>`;
@@ -665,9 +702,9 @@ async function showGraphDetail(node, rootQuery) {
   detail.innerHTML = `
     <div class="graph-detail-header">
       <strong>${escapeHtml(node.label)}</strong>
-      <span class="rel-badge rel-${node.relation}">${node.relation === "root" ? "query" : node.relation} rispetto a "${escapeHtml(rootQuery)}"</span>
-      <button class="graph-detail-concept" data-tag="${escapeHtml(node.label)}">📖 Pagina di sintesi</button>
-      <button class="graph-detail-search" data-tag="${escapeHtml(node.label)}">Cerca «${escapeHtml(node.label)}»</button>${expandBtn}
+      <span class="rel-badge rel-${node.relation}">${node.relation === "root" ? "query" : node.relation} relative to "${escapeHtml(rootQuery)}"</span>
+      <button class="graph-detail-concept" data-tag="${escapeHtml(node.label)}">📖 Synthesis page</button>
+      <button class="graph-detail-search" data-tag="${escapeHtml(node.label)}">Search «${escapeHtml(node.label)}»</button>${expandBtn}
     </div>
     <div class="graph-detail-match">${matchInfo} ${freqInfo}</div>
     <div class="graph-detail-relations">${chips}</div>
@@ -687,7 +724,56 @@ async function showGraphDetail(node, rootQuery) {
   });
 }
 
+// Finds the shortest chain of relations connecting the current query to another concept the
+// user types in — same graph data as the map above, just searched instead of browsed.
+document.getElementById("concept-path-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const to = document.getElementById("concept-path-input").value.trim();
+  const resultEl = document.getElementById("concept-path-result");
+  if (!to || !currentQuery) return;
+
+  resultEl.textContent = "Searching for a link…";
+  try {
+    const res = await fetch(`${API_BASE}/graph/path?from=${encodeURIComponent(currentQuery)}&to=${encodeURIComponent(to)}`);
+    const data = await res.json();
+    renderConceptPath(data.path);
+  } catch (err) {
+    resultEl.textContent = `Error: ${err.message}`;
+  }
+});
+
+function renderConceptPath(path) {
+  const el = document.getElementById("concept-path-result");
+  if (!path || !path.length) {
+    el.textContent = "No link found within a few steps — that doesn't mean one doesn't exist, just that it didn't surface with the available data.";
+    return;
+  }
+  el.innerHTML = path.map((step, i) => {
+    const relLabel = i === 0 ? "" : `<span class="trail-connector rel-${step.relation}">→ ${step.relation}</span> `;
+    return `${relLabel}<span class="trail-chip">${escapeHtml(step.tag)}</span>`;
+  }).join(" ");
+}
+
 // --- Concept synthesis page --- definition + matched results + related concepts, one place
+// Groups the same related-tags data by relation into a rough "before / this / after" reading
+// order instead of one flat list — broader terms as things to know first, narrower as things
+// to explore next. These are automatic semantic relations, not curated prerequisites, so the
+// labels stay soft ("probabili", "possibili") rather than claiming a real dependency graph.
+function renderLearningOrder(related) {
+  if (!related.length) return "";
+  const group = (title, list) => list.length
+    ? `<div class="concept-order-group"><h4>${title}</h4><div class="concept-order-chips">${list.map((t) => tagChipHtml(t)).join("")}</div></div>`
+    : "";
+
+  const before = related.filter((t) => t.relation === "broader");
+  const after = related.filter((t) => t.relation === "narrower");
+  const other = related.filter((t) => t.relation !== "broader" && t.relation !== "narrower");
+
+  return group("📚 Likely basic concepts", before)
+    + group("🔍 Possible deeper dives", after)
+    + group("🔗 Other related concepts", other);
+}
+
 async function openConceptPage(node, rootQuery) {
   const modal = document.getElementById("concept-modal");
   const title = document.getElementById("concept-modal-title");
@@ -701,9 +787,9 @@ async function openConceptPage(node, rootQuery) {
 
   title.textContent = node.label;
   relationBadge.className = `rel-badge rel-${node.relation}`;
-  relationBadge.textContent = `${node.relation === "root" ? "query" : node.relation} rispetto a "${rootQuery}"`;
-  defsEl.innerHTML = `<p class="concept-loading">Caricamento definizione…</p>`;
-  relatedList.innerHTML = `<p class="concept-loading">Caricamento concetti collegati…</p>`;
+  relationBadge.textContent = `${node.relation === "root" ? "query" : node.relation} relative to "${rootQuery}"`;
+  defsEl.innerHTML = `<p class="concept-loading">Loading definition…</p>`;
+  relatedList.innerHTML = `<p class="concept-loading">Loading related concepts…</p>`;
   searchBtn.onclick = () => {
     closeConceptModal();
     searchTag(node.label, rootQuery, node.relation);
@@ -744,15 +830,11 @@ async function openConceptPage(node, rootQuery) {
 
     defsEl.innerHTML = data.definitions?.length
       ? definitionCardsHtml(data.definitions)
-      : `<p class="concept-empty">Nessuna definizione trovata per questo termine.</p>`;
+      : `<p class="concept-empty">No definition found for this term.</p>`;
 
     const related = (data.relatedTags ?? []).filter((t) => t.tag !== node.label.toLowerCase());
     relatedSection.classList.toggle("hidden", related.length === 0);
-    relatedList.innerHTML = related.length
-      ? related.map(
-          (t) => `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}</button>`
-        ).join("")
-      : "";
+    relatedList.innerHTML = renderLearningOrder(related);
     relatedList.querySelectorAll(".tag-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         closeConceptModal();
@@ -760,7 +842,7 @@ async function openConceptPage(node, rootQuery) {
       });
     });
   } catch (err) {
-    defsEl.innerHTML = `<p class="concept-empty">Errore nel caricamento: ${escapeHtml(err.message)}</p>`;
+    defsEl.innerHTML = `<p class="concept-empty">Loading error: ${escapeHtml(err.message)}</p>`;
     relatedList.innerHTML = "";
   }
 }
@@ -913,6 +995,11 @@ function clearResults() {
 }
 function escapeHtml(str) {
   return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Shared by the graph detail panel and the concept page's related-concepts lists
+function tagChipHtml(t, extra = "") {
+  return `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}${extra}</button>`;
 }
 
 // Show whatever was already explored in previous visits/searches, before any new search runs

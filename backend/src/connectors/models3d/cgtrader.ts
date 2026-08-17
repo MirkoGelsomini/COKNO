@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const cgtrader: Connector = {
   name: "CGTrader",
@@ -8,12 +7,9 @@ const cgtrader: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.cgtrader.com/free-3d-models?keywords=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/3d-models/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.cgtrader.com/free-3d-models?keywords=${encodeURIComponent(query)}`;
+    return scrapeConnector("CGTrader", scrapePage(url, "a[href*='/3d-models/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/3d-models/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/3d-models\/[^?#]+$/)) return;
@@ -31,12 +27,8 @@ const cgtrader: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "CGTrader", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("CGTrader", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

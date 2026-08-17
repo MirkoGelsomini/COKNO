@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const burst: Connector = {
   name: "Burst",
@@ -8,12 +7,9 @@ const burst: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://burst.shopify.com/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, ".photo-card, .grid__item");
-      const $ = cheerio.load(html);
+    const url = `https://burst.shopify.com/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Burst", scrapePage(url, ".photo-card, .grid__item"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/photos/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const burst: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Burst", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Burst", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

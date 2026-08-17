@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const reuters: Connector = {
   name: "Reuters Video",
@@ -8,12 +7,9 @@ const reuters: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.reuters.com/search/news?blob=${encodeURIComponent(query)}&mediaType=video`;
-      const html = await scrapePage(url, "a[href*='/video/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.reuters.com/search/news?blob=${encodeURIComponent(query)}&mediaType=video`;
+    return scrapeConnector("Reuters Video", scrapePage(url, "a[href*='/video/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/video/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const reuters: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Reuters Video", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Reuters Video", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

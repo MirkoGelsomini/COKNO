@@ -152,13 +152,7 @@ export async function expandQuery(query: string): Promise<string[]> {
 
   // Parallel per term, so a slow lookup costs one timeout, not one per word
   const relationsByTerm = await Promise.all(terms.map((term) => getRelations(term)));
-  for (const relations of relationsByTerm) {
-    for (const rel of relations) {
-      if (rel.type === "synonym") {
-        expanded.add(rel.target);
-      }
-    }
-  }
+  relationsByTerm.flat().forEach((rel) => rel.type === "synonym" && expanded.add(rel.target));
 
   return Array.from(expanded);
 }
@@ -197,6 +191,49 @@ export async function getRelatedTags(query: string): Promise<RelatedTag[]> {
   }
 
   return relations.map((r) => ({ tag: r.target, relation: r.type, frequency: r.frequency }));
+}
+
+export interface ConceptPathStep {
+  tag: string;
+  relation: RelationType | "start";
+}
+
+const PATH_MAX_DEPTH = 3; // hops
+const PATH_MAX_NODES = 60; // total lookups before giving up, keeps this bounded
+
+// Breadth-first search over the same relations used elsewhere: expand one "ring" of
+// neighbors at a time (in parallel), stop as soon as `to` is found. Unweighted — the
+// first path found is the shortest by hop count, no preference between relation types.
+export async function findConceptPath(from: string, to: string): Promise<ConceptPathStep[] | null> {
+  const start = from.toLowerCase().trim();
+  const target = to.toLowerCase().trim();
+  if (start === target) return [{ tag: from, relation: "start" }];
+
+  const visited = new Set<string>([start]);
+  let frontier: { term: string; path: ConceptPathStep[] }[] = [
+    { term: start, path: [{ tag: from, relation: "start" }] },
+  ];
+  let explored = 0;
+
+  for (let depth = 0; depth < PATH_MAX_DEPTH && frontier.length && explored < PATH_MAX_NODES; depth++) {
+    const batch = frontier.slice(0, PATH_MAX_NODES - explored);
+    explored += batch.length;
+    const results = await Promise.all(batch.map((f) => getRelations(f.term)));
+
+    const nextFrontier: typeof frontier = [];
+    for (let i = 0; i < batch.length; i++) {
+      for (const rel of results[i]) {
+        if (rel.target === target) return [...batch[i].path, { tag: rel.target, relation: rel.type }];
+        if (!visited.has(rel.target)) {
+          visited.add(rel.target);
+          nextFrontier.push({ term: rel.target, path: [...batch[i].path, { tag: rel.target, relation: rel.type }] });
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+
+  return null;
 }
 
 export interface GraphNode {

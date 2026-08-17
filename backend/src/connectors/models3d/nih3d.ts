@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const nih3d: Connector = {
   name: "NIH 3D Print Exchange",
@@ -8,12 +7,9 @@ const nih3d: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://3d.nih.gov/search/?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/entries/']");
-      const $ = cheerio.load(html);
+    const url = `https://3d.nih.gov/search/?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("NIH 3D Print Exchange", scrapePage(url, "a[href*='/entries/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/entries/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (href === "/entries/" || !href.match(/\/entries\/\d+/)) return;
@@ -31,12 +27,8 @@ const nih3d: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "NIH 3D Print Exchange", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("NIH 3D Print Exchange", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

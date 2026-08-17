@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
 
 const openverse: Connector = {
   name: "Openverse",
@@ -6,16 +6,11 @@ const openverse: Connector = {
   type: "api",
 
   async search(query, page = 1): Promise<ConnectorResult> {
-    try {
-      const url = `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=12&page=${page}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Cokno/1.0" },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      return {
-        source: "Openverse",
+    const url = `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=12&page=${page}`;
+    return fetchJsonConnector(
+      "Openverse",
+      url,
+      (data) => ({
         total: data.result_count ?? 0,
         items: (data.results ?? []).map((r: any) => ({
           id: r.id,
@@ -27,10 +22,9 @@ const openverse: Connector = {
           category: "images",
           tags: (r.tags ?? []).map((t: any) => t.name ?? t),
         })),
-      };
-    } catch (err) {
-      return safeResult("Openverse", err);
-    }
+      }),
+      { headers: { "User-Agent": "Cokno/1.0" } }
+    );
   },
 };
 

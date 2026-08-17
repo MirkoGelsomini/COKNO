@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const coverr: Connector = {
   name: "Coverr",
@@ -8,12 +7,9 @@ const coverr: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://coverr.co/s?q=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://coverr.co/s?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Coverr", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("a[href*='/videos/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href || href === "/videos/") return;
@@ -31,12 +27,8 @@ const coverr: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Coverr", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Coverr", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

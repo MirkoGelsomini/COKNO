@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const animatedimages: Connector = {
   name: "AnimatedImages",
@@ -8,12 +7,9 @@ const animatedimages: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.animatedimages.org/search.php?search=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "img[src*='.gif']");
-      const $ = cheerio.load(html);
+    const url = `https://www.animatedimages.org/search.php?search=${encodeURIComponent(query)}`;
+    return scrapeConnector("AnimatedImages", scrapePage(url, "img[src*='.gif']"), ($) => {
       const items: any[] = [];
-
       $("a[href]").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -31,12 +27,8 @@ const animatedimages: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "AnimatedImages", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("AnimatedImages", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const grabcad: Connector = {
   name: "GrabCAD",
@@ -8,12 +7,9 @@ const grabcad: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://grabcad.com/library?search=${encodeURIComponent(query)}&sort=most_downloaded`;
-      const html = await scrapePage(url, ".model-card, a[href*='/library/']");
-      const $ = cheerio.load(html);
+    const url = `https://grabcad.com/library?search=${encodeURIComponent(query)}&sort=most_downloaded`;
+    return scrapeConnector("GrabCAD", scrapePage(url, ".model-card, a[href*='/library/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/library/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (href === "/library" || href.endsWith("?") || href.includes("?search=")) return;
@@ -31,12 +27,8 @@ const grabcad: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "GrabCAD", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("GrabCAD", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const freeimages: Connector = {
   name: "FreeImages",
@@ -8,12 +7,9 @@ const freeimages: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.freeimages.com/search/${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/photo/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.freeimages.com/search/${encodeURIComponent(query)}`;
+    return scrapeConnector("FreeImages", scrapePage(url, "a[href*='/photo/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/photo/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const freeimages: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "FreeImages", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("FreeImages", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

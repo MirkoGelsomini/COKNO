@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
 
 const conceptnet: Connector = {
   name: "ConceptNet",
@@ -6,36 +6,24 @@ const conceptnet: Connector = {
   type: "api",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const term = query.toLowerCase().trim().replace(/\s+/g, "_");
-      const url = `https://api.conceptnet.io/c/en/${encodeURIComponent(term)}?limit=12`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      const edges = data.edges ?? [];
-
-      const items = edges
+    const term = query.toLowerCase().trim().replace(/\s+/g, "_");
+    const url = `https://api.conceptnet.io/c/en/${encodeURIComponent(term)}?limit=12`;
+    return fetchJsonConnector("ConceptNet", url, (data) => {
+      const items = (data.edges ?? [])
         .filter((e: any) => e.start?.label && e.end?.label && e.rel?.label)
         .map((e: any) => {
-          const start = e.start.label;
-          const rel = e.rel.label;
-          const end = e.end.label;
           const nodeId = e.end["@id"] ?? e.start["@id"];
           return {
             id: e["@id"],
-            title: `${start} → ${rel} → ${end}`,
+            title: `${e.start.label} → ${e.rel.label} → ${e.end.label}`,
             url: `https://conceptnet.io${nodeId}`,
-            description: `Relation: ${rel} (weight: ${(e.weight ?? 0).toFixed(2)})`,
+            description: `Relation: ${e.rel.label} (weight: ${(e.weight ?? 0).toFixed(2)})`,
             source: "ConceptNet",
             category: "texts",
           };
         });
-
-      return { source: "ConceptNet", total: items.length, items };
-    } catch (err) {
-      return safeResult("ConceptNet", err);
-    }
+      return { total: items.length, items };
+    });
   },
 };
 

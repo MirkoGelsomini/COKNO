@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const makerworld: Connector = {
   name: "MakerWorld",
@@ -8,12 +7,9 @@ const makerworld: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://makerworld.com/en/search?keyword=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/models/']");
-      const $ = cheerio.load(html);
+    const url = `https://makerworld.com/en/search?keyword=${encodeURIComponent(query)}`;
+    return scrapeConnector("MakerWorld", scrapePage(url, "a[href*='/models/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/models/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (href === "/en/models" || !href.match(/\/models\/\d+/)) return;
@@ -31,12 +27,8 @@ const makerworld: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "MakerWorld", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("MakerWorld", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

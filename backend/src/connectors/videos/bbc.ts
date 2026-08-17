@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const bbc: Connector = {
   name: "BBC Archive",
@@ -8,12 +7,9 @@ const bbc: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.bbc.co.uk/archive/search/?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/archive/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.bbc.co.uk/archive/search/?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("BBC Archive", scrapePage(url, "a[href*='/archive/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/archive/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (href === "/archive/" || href.includes("search")) return;
@@ -31,12 +27,8 @@ const bbc: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "BBC Archive", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("BBC Archive", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

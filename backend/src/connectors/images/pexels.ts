@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, safeResult, fetchJsonConnector } from "../types";
 
 const pexels: Connector = {
   name: "Pexels",
@@ -9,14 +9,11 @@ const pexels: Connector = {
     const key = process.env.PEXELS_API_KEY;
     if (!key) return safeResult("Pexels", "PEXELS_API_KEY not set");
 
-    try {
-      const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=12&page=${page}`;
-      const res = await fetch(url, { headers: { Authorization: key } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      return {
-        source: "Pexels",
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=12&page=${page}`;
+    return fetchJsonConnector(
+      "Pexels",
+      url,
+      (data) => ({
         total: data.total_results ?? 0,
         items: (data.photos ?? []).map((p: any) => ({
           id: String(p.id),
@@ -27,10 +24,9 @@ const pexels: Connector = {
           source: "Pexels",
           category: "images",
         })),
-      };
-    } catch (err) {
-      return safeResult("Pexels", err);
-    }
+      }),
+      { headers: { Authorization: key } }
+    );
   },
 };
 

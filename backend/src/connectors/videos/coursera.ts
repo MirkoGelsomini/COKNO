@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const coursera: Connector = {
   name: "Coursera",
@@ -8,12 +7,9 @@ const coursera: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.coursera.org/search?query=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://www.coursera.org/search?query=${encodeURIComponent(query)}`;
+    return scrapeConnector("Coursera", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("a[href*='/learn/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("/learn/")) return;
@@ -31,12 +27,8 @@ const coursera: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Coursera", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Coursera", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

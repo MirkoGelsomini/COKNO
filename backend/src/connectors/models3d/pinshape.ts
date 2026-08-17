@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const pinshape: Connector = {
   name: "Pinshape",
@@ -8,12 +7,9 @@ const pinshape: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://pinshape.com/items?search=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://pinshape.com/items?search=${encodeURIComponent(query)}`;
+    return scrapeConnector("Pinshape", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("a[href*='/items/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/items\/\d+/)) return;
@@ -31,12 +27,8 @@ const pinshape: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Pinshape", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Pinshape", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

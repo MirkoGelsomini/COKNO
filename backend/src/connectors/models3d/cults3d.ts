@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const cults3d: Connector = {
   name: "Cults3D",
@@ -8,12 +7,9 @@ const cults3d: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://cults3d.com/en/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "article, a[href*='/3d-model/']");
-      const $ = cheerio.load(html);
+    const url = `https://cults3d.com/en/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Cults3D", scrapePage(url, "article, a[href*='/3d-model/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/3d-model/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const cults3d: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Cults3D", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Cults3D", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

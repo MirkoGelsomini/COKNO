@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const blenderswap: Connector = {
   name: "BlenderSwap",
@@ -8,12 +7,9 @@ const blenderswap: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.blenderswap.com/blends?search=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/blends/view/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.blenderswap.com/blends?search=${encodeURIComponent(query)}`;
+    return scrapeConnector("BlenderSwap", scrapePage(url, "a[href*='/blends/view/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/blends/view/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const blenderswap: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "BlenderSwap", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("BlenderSwap", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

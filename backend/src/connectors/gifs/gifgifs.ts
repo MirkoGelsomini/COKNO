@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const gifgifs: Connector = {
   name: "Gifgifs",
@@ -8,12 +7,9 @@ const gifgifs: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://gifgifs.com/search/?term=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/gif/'], img");
-      const $ = cheerio.load(html);
+    const url = `https://gifgifs.com/search/?term=${encodeURIComponent(query)}`;
+    return scrapeConnector("Gifgifs", scrapePage(url, "a[href*='/gif/'], img"), ($) => {
       const items: any[] = [];
-
       $("a[href]").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("/gif/") && !href.match(/gifgifs\.com\/[a-z0-9-]+\/?$/)) return;
@@ -31,12 +27,8 @@ const gifgifs: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Gifgifs", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Gifgifs", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

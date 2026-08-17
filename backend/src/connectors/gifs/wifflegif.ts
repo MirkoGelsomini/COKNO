@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 function titleFromSlug(href: string): string {
   const match = href.match(/\/gifs\/\d+-(.+)$/);
@@ -15,12 +14,9 @@ const wifflegif: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://wifflegif.com/gifs/search?q=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://wifflegif.com/gifs/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Wifflegif", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("a[href*='/gifs/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (href === "/gifs/" || href.endsWith("/search") || href.includes("?")) return;
@@ -38,12 +34,8 @@ const wifflegif: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Wifflegif", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Wifflegif", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

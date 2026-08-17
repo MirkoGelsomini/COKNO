@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const pbs: Connector = {
   name: "PBS Learning Media",
@@ -8,12 +7,9 @@ const pbs: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.pbslearningmedia.org/search/?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/resource/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.pbslearningmedia.org/search/?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("PBS Learning Media", scrapePage(url, "a[href*='/resource/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/resource/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("/resource/")) return;
@@ -31,12 +27,8 @@ const pbs: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "PBS Learning Media", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("PBS Learning Media", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const mitocw: Connector = {
   name: "MIT OpenCourseWare",
@@ -8,12 +7,9 @@ const mitocw: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://ocw.mit.edu/search/?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/courses/']");
-      const $ = cheerio.load(html);
+    const url = `https://ocw.mit.edu/search/?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("MIT OpenCourseWare", scrapePage(url, "a[href*='/courses/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/courses/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/courses\/[a-z0-9-]+\/?$/)) return;
@@ -31,12 +27,8 @@ const mitocw: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "MIT OpenCourseWare", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("MIT OpenCourseWare", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

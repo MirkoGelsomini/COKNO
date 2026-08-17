@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const etymonline: Connector = {
   name: "Etymonline",
@@ -8,10 +7,8 @@ const etymonline: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.etymonline.com/search?q=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://www.etymonline.com/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Etymonline", plainFetchPage(url), ($) => {
       const items: any[] = [];
       // "Related entries & more" links match the same /word/ selector as real titles
       const JUNK_TITLES = /related entries|remove ads|advertisement/i;
@@ -38,11 +35,8 @@ const etymonline: Connector = {
         }
       });
 
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Etymonline", total: unique.length, items: unique.slice(0, 12) };
-    } catch (err) {
-      return safeResult("Etymonline", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()].slice(0, 12);
+    });
   },
 };
 

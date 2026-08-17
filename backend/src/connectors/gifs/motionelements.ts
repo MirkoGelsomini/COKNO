@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const motionelements: Connector = {
   name: "MotionElements",
@@ -8,12 +7,9 @@ const motionelements: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.motionelements.com/free/free-gifs?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/stock-gifs/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.motionelements.com/free/free-gifs?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("MotionElements", scrapePage(url, "a[href*='/stock-gifs/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/stock-gifs/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const motionelements: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "MotionElements", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("MotionElements", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

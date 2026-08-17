@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const pond5: Connector = {
   name: "Pond5",
@@ -8,12 +7,9 @@ const pond5: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.pond5.com/search?kw=${encodeURIComponent(query)}&media=footage`;
-      const html = await scrapePage(url, "a[href*='/stock-video-footage/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.pond5.com/search?kw=${encodeURIComponent(query)}&media=footage`;
+    return scrapeConnector("Pond5", scrapePage(url, "a[href*='/stock-video-footage/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/stock-video-footage/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/stock-video-footage\/\d+/)) return;
@@ -31,12 +27,8 @@ const pond5: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Pond5", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Pond5", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

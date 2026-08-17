@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, safeResult, fetchJsonConnector } from "../types";
 
 const dpla: Connector = {
   name: "DPLA",
@@ -9,14 +9,10 @@ const dpla: Connector = {
     const key = process.env.DPLA_API_KEY;
     if (!key) return safeResult("DPLA", "DPLA_API_KEY not set");
 
-    try {
-      const url =
-        `https://api.dp.la/v2/items?q=${encodeURIComponent(query)}` +
-        `&api_key=${key}&page_size=12&page=${page}&sourceResource.type=image`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
+    const url =
+      `https://api.dp.la/v2/items?q=${encodeURIComponent(query)}` +
+      `&api_key=${key}&page_size=12&page=${page}&sourceResource.type=image`;
+    return fetchJsonConnector("DPLA", url, (data) => {
       const items = (data.docs ?? [])
         .map((doc: any) => {
           const sr = doc.sourceResource ?? {};
@@ -34,11 +30,8 @@ const dpla: Connector = {
           };
         })
         .filter(Boolean);
-
-      return { source: "DPLA", total: data.count ?? items.length, items };
-    } catch (err) {
-      return safeResult("DPLA", err);
-    }
+      return { total: data.count ?? items.length, items };
+    });
   },
 };
 

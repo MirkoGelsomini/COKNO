@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const mixkit: Connector = {
   name: "Mixkit",
@@ -8,12 +7,9 @@ const mixkit: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://mixkit.co/search/${encodeURIComponent(query)}/`;
-      const html = await scrapePage(url, "article, .item-card");
-      const $ = cheerio.load(html);
+    const url = `https://mixkit.co/search/${encodeURIComponent(query)}/`;
+    return scrapeConnector("Mixkit", scrapePage(url, "article, .item-card"), ($) => {
       const items: any[] = [];
-
       $("article a[href], .item-card a[href]").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href || href === "/" || href === "#") return;
@@ -31,12 +27,8 @@ const mixkit: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Mixkit", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Mixkit", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

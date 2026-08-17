@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cokno — Multi-source Search</title>
+  <title>Cokno — Connected Concept Explorer</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <header>
     <h1>Cokno</h1>
+    <p class="subtitle">A connected map of concepts — not just a search engine.</p>
 
     <form id="search-form">
       <div class="search-bar">
@@ -41,10 +42,10 @@
   <main>
     <section id="trail-section" class="hidden">
       <div id="trail-header">
-        <h2>Percorso di conoscenza</h2>
-        <button id="trail-clear" class="trail-clear-btn">Cancella percorso</button>
+        <h2>Knowledge trail</h2>
+        <button id="trail-clear" class="trail-clear-btn">Clear trail</button>
       </div>
-      <p class="trail-hint">I concetti che hai esplorato in questa sessione, e come sei arrivato da uno all'altro.</p>
+      <p class="trail-hint">The concepts you've explored this session, and how you got from one to the next.</p>
       <div id="trail-path"></div>
     </section>
 
@@ -58,7 +59,7 @@
     </section>
 
     <section id="definitions-section" class="hidden">
-      <h2>Definizione</h2>
+      <h2>Definition</h2>
       <div id="definitions-list"></div>
     </section>
 
@@ -73,6 +74,14 @@
         </div>
       </div>
       <div id="graph-detail" class="hidden"></div>
+
+      <div id="concept-path-section">
+        <form id="concept-path-form">
+          <input type="text" id="concept-path-input" placeholder="Link with another concept…" autocomplete="off" />
+          <button type="submit">Find link</button>
+        </form>
+        <div id="concept-path-result"></div>
+      </div>
     </section>
 
     <section id="results-section">
@@ -94,10 +103,10 @@
         <p id="modal-author" class="card-author"></p>
         <p id="modal-desc" class="card-desc"></p>
         <div id="modal-tags" class="card-tags"></div>
-        <a id="modal-open-link" href="#" target="_blank" rel="noopener" class="modal-open-btn">Apri sorgente ↗</a>
+        <a id="modal-open-link" href="#" target="_blank" rel="noopener" class="modal-open-btn">Open source ↗</a>
       </div>
       <div id="modal-related" class="hidden">
-        <h3>Risultati correlati</h3>
+        <h3>Related results</h3>
         <div id="modal-related-grid"></div>
       </div>
     </div>
@@ -115,16 +124,16 @@
       <div id="concept-modal-definitions" class="concept-modal-section"></div>
 
       <div id="concept-modal-media" class="concept-modal-section hidden">
-        <h3>Risultati di questa ricerca</h3>
+        <h3>Results from this search</h3>
         <div id="concept-modal-media-grid"></div>
       </div>
 
       <div id="concept-modal-related" class="concept-modal-section">
-        <h3>Concetti collegati</h3>
+        <h3>Related concepts</h3>
         <div id="concept-modal-related-list"></div>
       </div>
 
-      <button id="concept-modal-search-btn" class="modal-open-btn">Cerca questo termine</button>
+      <button id="concept-modal-search-btn" class="modal-open-btn">Search this term</button>
     </div>
   </div>
 

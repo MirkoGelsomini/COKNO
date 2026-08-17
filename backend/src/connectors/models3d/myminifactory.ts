@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const myminifactory: Connector = {
   name: "MyMiniFactory",
@@ -8,12 +7,9 @@ const myminifactory: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.myminifactory.com/search/?search=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, ".object-card, a[href*='/object/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.myminifactory.com/search/?search=${encodeURIComponent(query)}`;
+    return scrapeConnector("MyMiniFactory", scrapePage(url, ".object-card, a[href*='/object/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/object/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("/object/")) return;
@@ -31,12 +27,8 @@ const myminifactory: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "MyMiniFactory", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("MyMiniFactory", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getConnectors, listSources } from "../connectors/registry";
-import { expandQuery, getRelatedTags, buildGraphNodes } from "../services/knowledgeGraph";
+import { expandQuery, getRelatedTags, buildGraphNodes, findConceptPath } from "../services/knowledgeGraph";
 import { filterSafe, isQueryBlocked } from "../services/safeSearch";
 import { DICTIONARY_SOURCES, interleaveBySource, fetchDefinitionsFor, isTitleRelevant } from "../services/definitions";
 import { textRelatesToQuery } from "../services/textRelevance";
@@ -134,7 +134,7 @@ router.get("/search", async (req: Request, res: Response) => {
 
   const sources = safeSources.map((s) =>
     !s.error && batchHasNoRelevance(s.items, q)
-      ? { ...s, items: [], error: "Nessun risultato pertinente (contenuti generici scartati)" }
+      ? { ...s, items: [], error: "No relevant results (generic content discarded)" }
       : s
   );
 
@@ -201,6 +201,16 @@ router.get("/graph/expand", async (req: Request, res: Response) => {
   }
   const [expandedTerms, relatedTags] = await Promise.all([expandQuery(tag), getRelatedTags(tag)]);
   return res.json({ tag, expandedTerms, relatedTags });
+});
+
+// GET /api/graph/path?from=limit&to=integral — shortest chain of relations connecting two concepts
+router.get("/graph/path", async (req: Request, res: Response) => {
+  const { from, to } = req.query;
+  if (!from || typeof from !== "string" || !to || typeof to !== "string") {
+    return res.status(400).json({ error: "Parameters 'from' and 'to' are required" });
+  }
+  const path = await findConceptPath(from, to);
+  return res.json({ from, to, path });
 });
 
 // GET /api/concept?tag=apple+tree&safe=true — definition + related concepts for one graph

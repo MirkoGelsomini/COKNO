@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const gifer: Connector = {
   name: "Gifer",
@@ -8,12 +7,9 @@ const gifer: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://gifer.com/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/en/']");
-      const $ = cheerio.load(html);
+    const url = `https://gifer.com/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Gifer", scrapePage(url, "a[href*='/en/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/en/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,11 +26,8 @@ const gifer: Connector = {
           });
         }
       });
-
-      return { source: "Gifer", total: items.length, items };
-    } catch (err) {
-      return safeResult("Gifer", err);
-    }
+      return items;
+    });
   },
 };
 

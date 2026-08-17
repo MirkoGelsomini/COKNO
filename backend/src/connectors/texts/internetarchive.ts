@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
 
 const internetarchive: Connector = {
   name: "Internet Archive",
@@ -6,19 +6,13 @@ const internetarchive: Connector = {
   type: "api",
 
   async search(query, page = 1): Promise<ConnectorResult> {
-    try {
-      const start = (page - 1) * 12;
-      const url =
-        `https://archive.org/advancedsearch.php` +
-        `?q=${encodeURIComponent(query)}+AND+mediatype%3Atexts` +
-        `&fl=identifier,title,creator,description&rows=12&start=${start}&output=json`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json() as any;
-      const docs = data.response?.docs ?? [];
-
-      const items = docs
+    const start = (page - 1) * 12;
+    const url =
+      `https://archive.org/advancedsearch.php` +
+      `?q=${encodeURIComponent(query)}+AND+mediatype%3Atexts` +
+      `&fl=identifier,title,creator,description&rows=12&start=${start}&output=json`;
+    return fetchJsonConnector("Internet Archive", url, (data) => {
+      const items = (data.response?.docs ?? [])
         .filter((d: any) => d.identifier && d.title)
         .map((d: any) => ({
           id: d.identifier,
@@ -30,11 +24,8 @@ const internetarchive: Connector = {
           source: "Internet Archive",
           category: "texts",
         }));
-
-      return { source: "Internet Archive", total: data.response?.numFound ?? items.length, items };
-    } catch (err) {
-      return safeResult("Internet Archive", err);
-    }
+      return { total: data.response?.numFound ?? items.length, items };
+    });
   },
 };
 

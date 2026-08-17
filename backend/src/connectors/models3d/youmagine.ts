@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const youmagine: Connector = {
   name: "YouMagine",
@@ -8,12 +7,9 @@ const youmagine: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.youmagine.com/designs?query=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://www.youmagine.com/designs?query=${encodeURIComponent(query)}`;
+    return scrapeConnector("YouMagine", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("a[href*='/designs/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (href === "/designs" || href.includes("?")) return;
@@ -31,12 +27,8 @@ const youmagine: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "YouMagine", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("YouMagine", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const printables: Connector = {
   name: "Printables",
@@ -8,12 +7,9 @@ const printables: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://www.printables.com/search/models?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/model/']");
-      const $ = cheerio.load(html);
+    const url = `https://www.printables.com/search/models?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Printables", scrapePage(url, "a[href*='/model/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/model/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/model\/\d+/)) return;
@@ -31,12 +27,8 @@ const printables: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Printables", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Printables", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

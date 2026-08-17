@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const gifsec: Connector = {
   name: "Gifsec",
@@ -8,12 +7,9 @@ const gifsec: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://gifsec.com/?q=${encodeURIComponent(query)}&s=search`;
-      const html = await scrapePage(url, "article, .gif-item");
-      const $ = cheerio.load(html);
+    const url = `https://gifsec.com/?q=${encodeURIComponent(query)}&s=search`;
+    return scrapeConnector("Gifsec", scrapePage(url, "article, .gif-item"), ($) => {
       const items: any[] = [];
-
       $("a[href]").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.includes("gifsec.com/") || href === "https://gifsec.com/") return;
@@ -31,12 +27,8 @@ const gifsec: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Gifsec", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Gifsec", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

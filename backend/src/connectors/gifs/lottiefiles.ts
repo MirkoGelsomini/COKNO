@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const lottiefiles: Connector = {
   name: "LottieFiles",
@@ -8,12 +7,9 @@ const lottiefiles: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://lottiefiles.com/free-animations?search=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/animations/']");
-      const $ = cheerio.load(html);
+    const url = `https://lottiefiles.com/free-animations?search=${encodeURIComponent(query)}`;
+    return scrapeConnector("LottieFiles", scrapePage(url, "a[href*='/animations/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/animations/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img, lottie-player").first();
@@ -30,12 +26,8 @@ const lottiefiles: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "LottieFiles", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("LottieFiles", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

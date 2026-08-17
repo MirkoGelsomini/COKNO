@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const makeagif: Connector = {
   name: "MakeAGif",
@@ -8,12 +7,9 @@ const makeagif: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://makeagif.com/search/${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/gif/']");
-      const $ = cheerio.load(html);
+    const url = `https://makeagif.com/search/${encodeURIComponent(query)}`;
+    return scrapeConnector("MakeAGif", scrapePage(url, "a[href*='/gif/']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/gif/']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,12 +26,8 @@ const makeagif: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "MakeAGif", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("MakeAGif", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

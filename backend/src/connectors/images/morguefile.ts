@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const morguefile: Connector = {
   name: "Morguefile",
@@ -8,12 +7,9 @@ const morguefile: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://morguefile.com/search?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, ".photo-tile, figure");
-      const $ = cheerio.load(html);
+    const url = `https://morguefile.com/search?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Morguefile", scrapePage(url, ".photo-tile, figure"), ($) => {
       const items: any[] = [];
-
       $("figure a, a.photo-tile").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         const img = $(el).find("img").first();
@@ -30,11 +26,8 @@ const morguefile: Connector = {
           });
         }
       });
-
-      return { source: "Morguefile", total: items.length, items };
-    } catch (err) {
-      return safeResult("Morguefile", err);
-    }
+      return items;
+    });
   },
 };
 

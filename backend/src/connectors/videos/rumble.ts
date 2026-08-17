@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { scrapePage } from "../../utils/browserLimited";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const rumble: Connector = {
   name: "Rumble",
@@ -8,12 +7,9 @@ const rumble: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://rumble.com/search/video?q=${encodeURIComponent(query)}`;
-      const html = await scrapePage(url, "a[href*='/v']");
-      const $ = cheerio.load(html);
+    const url = `https://rumble.com/search/video?q=${encodeURIComponent(query)}`;
+    return scrapeConnector("Rumble", scrapePage(url, "a[href*='/v']"), ($) => {
       const items: any[] = [];
-
       $("a[href*='/v']").each((_, el) => {
         const href = $(el).attr("href") ?? "";
         if (!href.match(/\/v[a-z0-9]+-/)) return;
@@ -31,12 +27,8 @@ const rumble: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Rumble", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Rumble", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 

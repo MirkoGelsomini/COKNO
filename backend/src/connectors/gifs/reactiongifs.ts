@@ -1,6 +1,5 @@
-import * as cheerio from "cheerio";
 import { plainFetchPage } from "../../utils/browser";
-import { Connector, ConnectorResult, safeResult } from "../types";
+import { Connector, ConnectorResult, scrapeConnector } from "../types";
 
 const reactiongifs: Connector = {
   name: "Reaction GIFs",
@@ -8,12 +7,9 @@ const reactiongifs: Connector = {
   type: "scraping",
 
   async search(query): Promise<ConnectorResult> {
-    try {
-      const url = `https://reactiongifs.com/?s=${encodeURIComponent(query)}`;
-      const html = await plainFetchPage(url);
-      const $ = cheerio.load(html);
+    const url = `https://reactiongifs.com/?s=${encodeURIComponent(query)}`;
+    return scrapeConnector("Reaction GIFs", plainFetchPage(url), ($) => {
       const items: any[] = [];
-
       $("img[src*='.gif']").each((_, el) => {
         const src = $(el).attr("src") ?? "";
         const alt = $(el).attr("alt") || "";
@@ -30,12 +26,8 @@ const reactiongifs: Connector = {
           });
         }
       });
-
-      const unique = [...new Map(items.map((i) => [i.id, i])).values()];
-      return { source: "Reaction GIFs", total: unique.length, items: unique };
-    } catch (err) {
-      return safeResult("Reaction GIFs", err);
-    }
+      return [...new Map(items.map((i) => [i.id, i])).values()];
+    });
   },
 };
 
