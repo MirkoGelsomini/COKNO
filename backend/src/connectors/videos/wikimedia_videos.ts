@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector, stripHtml } from "../types";
 
 const wikimediaVideos: Connector = {
   name: "Wikimedia Videos",
@@ -19,7 +19,7 @@ const wikimediaVideos: Connector = {
           id: String(r.pageid),
           title: filename,
           url: `https://commons.wikimedia.org/wiki/File:${encoded}`,
-          description: r.snippet?.replace(/<[^>]+>/g, ""),
+          description: stripHtml(r.snippet),
           source: "Wikimedia Videos",
           category: "videos" as const,
         };

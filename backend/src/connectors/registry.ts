@@ -87,7 +87,6 @@ import wikipedia from "./texts/wikipedia";
 import openalex from "./texts/openalex";
 import etymonline from "./texts/etymonline";
 import treccani from "./texts/treccani";
-import conceptnet from "./texts/conceptnet";
 import gutenberg from "./texts/gutenberg";
 import internetarchive from "./texts/internetarchive";
 import arxiv from "./texts/arxiv";
@@ -123,7 +122,7 @@ const all: Connector[] = [
   warehouse3d, blenderswap, pinshape, youmagine, nih3d,
 
   wikipedia, openalex, etymonline, treccani,
-  conceptnet, gutenberg, internetarchive, arxiv, pubmed, semanticscholar,
+  gutenberg, internetarchive, arxiv, pubmed, semanticscholar,
   openlibrary, wikisource, simplewiki, doaj, merriamwebster, core,
   cambridge, stanfordPhilosophy, base, doab,
 ];

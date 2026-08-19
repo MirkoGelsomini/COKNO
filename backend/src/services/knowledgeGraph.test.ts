@@ -1,7 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildGraphNodes } from "./knowledgeGraph";
+import { buildGraphNodes, mergeRelations } from "./knowledgeGraph";
 import { SearchItem } from "../connectors/types";
+
+test("mergeRelations puts curated relations first", () => {
+  const curated = [{ type: "broader" as const, target: "fundamental interaction", curated: true }];
+  const lexical = [{ type: "related" as const, target: "solemnity" }];
+  const result = mergeRelations(curated, lexical, 10);
+  assert.deepEqual(result.map((r) => r.target), ["fundamental interaction", "solemnity"]);
+});
+
+test("mergeRelations drops a lexical duplicate of a curated target", () => {
+  const curated = [{ type: "broader" as const, target: "gravitation", curated: true }];
+  const lexical = [
+    { type: "related" as const, target: "gravitation" }, // same word, lexical source — should lose
+    { type: "related" as const, target: "relativity" },
+  ];
+  const result = mergeRelations(curated, lexical, 10);
+  assert.deepEqual(result.map((r) => r.target), ["gravitation", "relativity"]);
+  assert.equal(result[0].curated, true);
+});
+
+test("mergeRelations respects the overall cap", () => {
+  const curated = [
+    { type: "broader" as const, target: "a", curated: true },
+    { type: "broader" as const, target: "b", curated: true },
+  ];
+  const lexical = [
+    { type: "related" as const, target: "c" },
+    { type: "related" as const, target: "d" },
+  ];
+  const result = mergeRelations(curated, lexical, 3);
+  assert.equal(result.length, 3);
+});
 
 test("buildGraphNodes creates a root node reflecting all current results", () => {
   const items: SearchItem[] = [

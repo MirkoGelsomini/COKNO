@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector, stripHtml } from "../types";
 
 const wikisource: Connector = {
   name: "Wikisource",
@@ -16,7 +16,7 @@ const wikisource: Connector = {
         id: String(r.pageid),
         title: r.title,
         url: `https://en.wikisource.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
-        description: r.snippet?.replace(/<[^>]+>/g, ""),
+        description: stripHtml(r.snippet),
         source: "Wikisource",
         category: "texts",
       })),

@@ -43,10 +43,19 @@
     <section id="trail-section" class="hidden">
       <div id="trail-header">
         <h2>Knowledge trail</h2>
-        <button id="trail-clear" class="trail-clear-btn">Clear trail</button>
+        <div class="trail-header-actions">
+          <button id="trail-save" class="trail-clear-btn">💾 Save path</button>
+          <button id="trail-clear" class="trail-clear-btn">Clear trail</button>
+        </div>
       </div>
       <p class="trail-hint">The concepts you've explored this session, and how you got from one to the next.</p>
       <div id="trail-path"></div>
+    </section>
+
+    <section id="saved-paths-section" class="hidden">
+      <h2>Saved paths</h2>
+      <p class="trail-hint">Saved on purpose — these stay even after you clear the trail above, so you can come back and check what you found.</p>
+      <div id="saved-paths-list"></div>
     </section>
 
     <section id="meta-section" class="hidden">
@@ -79,6 +88,7 @@
         <form id="concept-path-form">
           <input type="text" id="concept-path-input" placeholder="Link with another concept…" autocomplete="off" />
           <button type="submit">Find link</button>
+          <button type="button" id="compare-btn" class="secondary-btn">⇄ Compare</button>
         </form>
         <div id="concept-path-result"></div>
       </div>
@@ -134,6 +144,68 @@
       </div>
 
       <button id="concept-modal-search-btn" class="modal-open-btn">Search this term</button>
+    </div>
+  </div>
+
+  <div id="compare-modal" class="modal hidden">
+    <div id="compare-modal-backdrop"></div>
+    <div class="modal-content compare-modal-content">
+      <button id="compare-modal-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="compare-header">
+        <h2 id="compare-title-a"></h2>
+        <span class="compare-vs">vs</span>
+        <h2 id="compare-title-b"></h2>
+      </div>
+
+      <div id="compare-shared-section" class="concept-modal-section hidden">
+        <h3>In common</h3>
+        <div id="compare-shared-tags"></div>
+      </div>
+
+      <div id="compare-columns">
+        <div class="compare-col">
+          <div id="compare-defs-a"></div>
+          <h4>Only in <span id="compare-label-a"></span></h4>
+          <div id="compare-only-a"></div>
+        </div>
+        <div class="compare-col">
+          <div id="compare-defs-b"></div>
+          <h4>Only in <span id="compare-label-b"></span></h4>
+          <div id="compare-only-b"></div>
+        </div>
+      </div>
+
+      <div id="compare-path-section" class="concept-modal-section">
+        <h3>How they connect</h3>
+        <div id="compare-path-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="path-review-modal" class="modal hidden">
+    <div id="path-review-backdrop"></div>
+    <div class="modal-content concept-modal-content">
+      <button id="path-review-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="path-review-header">
+        <h2 id="path-review-title"></h2>
+        <button id="path-review-delete" class="trail-clear-btn">Delete path</button>
+      </div>
+
+      <div id="path-review-nav">
+        <button id="path-review-prev" type="button">‹ Previous</button>
+        <span id="path-review-step"></span>
+        <button id="path-review-next" type="button">Next ›</button>
+      </div>
+
+      <div id="path-review-body">
+        <span id="path-review-relation" class="rel-badge"></span>
+        <h3 id="path-review-concept"></h3>
+        <div id="path-review-definitions" class="concept-modal-section"></div>
+        <div class="concept-modal-section">
+          <h3>Related concepts</h3>
+          <div id="path-review-related-list"></div>
+        </div>
+      </div>
     </div>
   </div>
 

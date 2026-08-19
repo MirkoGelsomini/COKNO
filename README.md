@@ -1,6 +1,6 @@
 # COKNO
 
-Motore di ricerca federato multi-fonte con grafo di conoscenza: aggrega risultati da 99 connettori esterni su 5 categorie (immagini, video, GIF, modelli 3D, testi), e li collega tra loro tramite un grafo di relazioni semantiche esplorabile, definizioni da dizionario, e un percorso di conoscenza persistito per sessione.
+Motore di ricerca federato multi-fonte con grafo di conoscenza: aggrega risultati da 98 connettori esterni su 5 categorie (immagini, video, GIF, modelli 3D, testi), e li collega tra loro tramite un grafo di relazioni — fatti curati da Wikidata più associazioni lessicali da Datamuse — esplorabile, definizioni da dizionario, e un percorso di conoscenza persistito per sessione.
 
 ## Requisiti
 
@@ -47,7 +47,7 @@ Per abilitarle:
    | Modelli 3D | Thingiverse |
    | Testi | Merriam-Webster, CORE |
 
-   Tutti gli altri connettori (NASA, Library of Congress, The Met, Wikipedia, arXiv, PubMed, Etymonline, Treccani, ConceptNet, Reddit, TED, Sketchfab, ecc.) non richiedono alcuna chiave.
+   Tutti gli altri connettori (NASA, Library of Congress, The Met, Wikipedia, arXiv, PubMed, Etymonline, Treccani, Wikidata, Reddit, TED, Sketchfab, ecc.) non richiedono alcuna chiave.
 3. Riavvia il backend (`npm run dev`) perché le nuove variabili vengano lette.
 
 ## Struttura del progetto

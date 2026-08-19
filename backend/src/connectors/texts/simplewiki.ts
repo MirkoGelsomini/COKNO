@@ -1,4 +1,4 @@
-import { Connector, ConnectorResult, fetchJsonConnector } from "../types";
+import { Connector, ConnectorResult, fetchJsonConnector, stripHtml } from "../types";
 
 const simplewiki: Connector = {
   name: "Simple Wikipedia",
@@ -16,7 +16,7 @@ const simplewiki: Connector = {
         id: String(r.pageid),
         title: r.title,
         url: `https://simple.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
-        description: r.snippet?.replace(/<[^>]+>/g, ""),
+        description: stripHtml(r.snippet),
         source: "Simple Wikipedia",
         category: "texts",
       })),

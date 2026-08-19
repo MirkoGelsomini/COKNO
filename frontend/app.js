@@ -18,6 +18,21 @@ let graphState = null; // { rootId, rootQuery, selectedId, nodesById: Map<id, no
 const EXPAND_CHILD_CAP = 6; // new nodes added per "Espandi nel grafo" click
 const GRAPH_NODE_CAP = 40; // total nodes across all levels before further expansion is blocked
 
+// Wires close button + backdrop click + shared Escape key for a modal. onClose runs any
+// extra cleanup (e.g. clearing state) before the modal is hidden.
+function setupModal(modalId, closeBtnId, backdropId, onClose) {
+  const close = () => {
+    document.getElementById(modalId).classList.add("hidden");
+    onClose?.();
+  };
+  document.getElementById(closeBtnId).addEventListener("click", close);
+  document.getElementById(backdropId).addEventListener("click", close);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !document.getElementById(modalId).classList.contains("hidden")) close();
+  });
+  return close;
+}
+
 function resetPaging() {
   currentPage = 1;
   subPage = 0;
@@ -196,6 +211,131 @@ document.getElementById("trail-clear").addEventListener("click", () => {
   renderTrail([]);
 });
 
+// --- Saved paths --- deliberate snapshots of the trail, kept separate from it so clearing
+// the (always-growing) trail above never loses something the user chose to keep.
+const SAVED_PATHS_KEY = "coknoSavedPaths";
+let reviewState = null; // { path, index } while the review modal is open
+
+function loadSavedPaths() {
+  try {
+    return JSON.parse(localStorage.getItem(SAVED_PATHS_KEY)) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedPaths(paths) {
+  localStorage.setItem(SAVED_PATHS_KEY, JSON.stringify(paths));
+}
+
+document.getElementById("trail-save").addEventListener("click", () => {
+  const trail = loadTrail();
+  if (!trail.length) return;
+  const paths = loadSavedPaths();
+  paths.push({
+    id: `${Date.now()}`,
+    name: `${trail[0].query} — ${new Date().toLocaleDateString()}`,
+    trail: trail.slice(),
+    createdAt: Date.now(),
+  });
+  persistSavedPaths(paths);
+  renderSavedPaths();
+});
+
+function renderSavedPaths() {
+  const section = document.getElementById("saved-paths-section");
+  const list = document.getElementById("saved-paths-list");
+  const paths = loadSavedPaths();
+
+  if (!paths.length) {
+    section.classList.add("hidden");
+    list.innerHTML = "";
+    return;
+  }
+  section.classList.remove("hidden");
+  list.innerHTML = "";
+  paths.slice().reverse().forEach((p) => {
+    const item = document.createElement("div");
+    item.className = "saved-path-item";
+    item.innerHTML = `
+      <span class="saved-path-name">${escapeHtml(p.name)}</span>
+      <span class="saved-path-meta">${p.trail.length} concept${p.trail.length === 1 ? "" : "s"}</span>
+    `;
+    item.addEventListener("click", () => openPathReview(p));
+    list.appendChild(item);
+  });
+}
+
+function openPathReview(path) {
+  reviewState = { path, index: 0 };
+  document.getElementById("path-review-title").textContent = path.name;
+  document.getElementById("path-review-modal").classList.remove("hidden");
+  renderReviewStep();
+}
+
+// Re-fetches the definition/related concepts for the step's term on demand — the saved
+// path only stores the query/relation, not a snapshot of the content, so review always
+// shows current data rather than a possibly-stale copy.
+async function renderReviewStep() {
+  const { path, index } = reviewState;
+  const step = path.trail[index];
+
+  document.getElementById("path-review-step").textContent = `${index + 1} / ${path.trail.length}`;
+  document.getElementById("path-review-prev").disabled = index === 0;
+  document.getElementById("path-review-next").disabled = index === path.trail.length - 1;
+
+  const relBadge = document.getElementById("path-review-relation");
+  if (step.relation) {
+    relBadge.textContent = `${step.relation} — reached from "${step.cameFrom}"`;
+    relBadge.className = `rel-badge rel-${step.relation}`;
+  } else {
+    relBadge.textContent = "Starting point";
+    relBadge.className = "rel-badge";
+  }
+
+  document.getElementById("path-review-concept").textContent = step.query;
+  const defsEl = document.getElementById("path-review-definitions");
+  const relatedEl = document.getElementById("path-review-related-list");
+  defsEl.innerHTML = `<p class="concept-loading">Loading…</p>`;
+  relatedEl.innerHTML = "";
+
+  try {
+    const safe = safeCheckbox.checked;
+    const res = await fetch(`${API_BASE}/concept?tag=${encodeURIComponent(step.query)}&safe=${safe}`);
+    const data = await res.json();
+    renderDefinitionsInto(defsEl, data.definitions);
+
+    const related = (data.relatedTags ?? []).filter((t) => t.tag !== step.query.toLowerCase());
+    relatedEl.innerHTML = related.length
+      ? related.map((t) => tagChipHtml(t)).join("")
+      : `<span class="graph-detail-empty">No further relations found.</span>`;
+    wireTagChips(relatedEl, closePathReview);
+  } catch (err) {
+    defsEl.innerHTML = `<p class="concept-empty">Loading error: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+document.getElementById("path-review-prev").addEventListener("click", () => {
+  if (!reviewState || reviewState.index === 0) return;
+  reviewState.index--;
+  renderReviewStep();
+});
+document.getElementById("path-review-next").addEventListener("click", () => {
+  if (!reviewState || reviewState.index >= reviewState.path.trail.length - 1) return;
+  reviewState.index++;
+  renderReviewStep();
+});
+document.getElementById("path-review-delete").addEventListener("click", () => {
+  if (!reviewState) return;
+  persistSavedPaths(loadSavedPaths().filter((p) => p.id !== reviewState.path.id));
+  renderSavedPaths();
+  closePathReview();
+});
+
+const closePathReview = setupModal("path-review-modal", "path-review-close", "path-review-backdrop", () => {
+  reviewState = null;
+});
+
 // Slices PAGE_SIZE cards from the fetched pool; only exhausting the pool fetches a new backend page
 function renderResultsSlice() {
   const start = subPage * PAGE_SIZE;
@@ -279,20 +419,11 @@ function renderMeta(data) {
   });
 
   const related = document.getElementById("related-tags");
-  related.innerHTML = "";
   if (data.relatedTags?.length) {
-    const label = document.createElement("span");
-    label.className = "related-label";
-    label.textContent = "Related:";
-    related.appendChild(label);
-    data.relatedTags.forEach(({ tag, relation }) => {
-      const chip = document.createElement("button");
-      chip.className = `tag-chip ${relation}`;
-      chip.textContent = tag;
-      chip.title = relation;
-      chip.addEventListener("click", () => searchTag(tag, data.query, relation));
-      related.appendChild(chip);
-    });
+    related.innerHTML = `<span class="related-label">Related:</span>` + data.relatedTags.map((t) => tagChipHtml(t)).join("");
+    wireTagChips(related, null, data.query);
+  } else {
+    related.innerHTML = "";
   }
 }
 
@@ -306,6 +437,24 @@ function definitionCardsHtml(definitions) {
       <a class="definition-link" href="${d.url}" target="_blank" rel="noopener">Open on ${escapeHtml(d.source)} ↗</a>
     </div>
   `).join("");
+}
+
+// Renders a definitions list (or its empty state) into el — shared by every concept view.
+function renderDefinitionsInto(el, definitions) {
+  el.innerHTML = definitions?.length
+    ? definitionCardsHtml(definitions)
+    : `<p class="concept-empty">No definition found for this term.</p>`;
+}
+
+// Wires every .tag-chip in container to pivot the search to it, closing the given modal
+// first if there is one (omit closeFn for chips that live outside a modal).
+function wireTagChips(container, closeFn, fromQuery) {
+  container.querySelectorAll(".tag-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      closeFn?.();
+      searchTag(chip.dataset.tag, fromQuery, chip.dataset.relation);
+    });
+  });
 }
 
 function renderSpellingSuggestion(suggestion) {
@@ -412,6 +561,7 @@ function renderGraph(graph, query) {
     nodesById.set(n.id, {
       id: n.id, label: n.label, relation: n.relation,
       matchCount: n.matchCount, matchedIds: n.matchedIds ?? [], frequency: n.frequency,
+      curated: n.curated,
       parentId: rootData.id, depth: 1, expanded: false, children: [],
     });
   });
@@ -534,17 +684,19 @@ function makeGraphNode(node, x, y, rootQuery) {
   const el = document.createElement("button");
   el.className = `graph-node rel-${node.relation}`;
   if (node.relation !== "root" && node.matchCount === 0) el.classList.add("no-match");
+  if (node.curated) el.classList.add("curated");
   if (graphState.selectedId === node.id) el.classList.add("selected");
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   const freqBadge = node.frequency != null ? ` <span class="node-freq">${node.frequency}%</span>` : "";
   const countBadge = node.matchCount > 0 ? ` <span class="node-count">${node.matchCount}</span>` : "";
+  const curatedMark = node.curated ? `<span class="curated-mark" title="Curated fact from Wikidata">✦</span> ` : "";
   el.innerHTML = node.relation === "root"
     ? escapeHtml(node.label)
-    : `${escapeHtml(node.label)}${freqBadge}${countBadge}`;
+    : `${curatedMark}${escapeHtml(node.label)}${freqBadge}${countBadge}`;
   el.title = node.relation === "root"
     ? "Current query"
-    : `${node.relation}${node.frequency != null ? ` — ${node.frequency}% frequency` : ""} — ${node.matchCount} current result${node.matchCount === 1 ? "" : "s"}`;
+    : `${node.relation}${node.curated ? " — curated fact from Wikidata" : ""}${node.frequency != null ? ` — ${node.frequency}% frequency` : ""} — ${node.matchCount} current result${node.matchCount === 1 ? "" : "s"}`;
 
   if (node.relation === "root") {
     el.classList.add("root");
@@ -615,7 +767,7 @@ async function toggleExpandNode(node) {
   candidates.forEach((c) => {
     const matched = itemsMatchingTagJS(resultPool, c.tag);
     graphState.nodesById.set(c.tag, {
-      id: c.tag, label: c.tag, relation: c.relation, frequency: c.frequency,
+      id: c.tag, label: c.tag, relation: c.relation, frequency: c.frequency, curated: c.curated,
       matchCount: matched.length, matchedIds: matched.map((m) => m.id),
       parentId: node.id, depth: node.depth + 1, expanded: false, children: [],
     });
@@ -702,7 +854,7 @@ async function showGraphDetail(node, rootQuery) {
   detail.innerHTML = `
     <div class="graph-detail-header">
       <strong>${escapeHtml(node.label)}</strong>
-      <span class="rel-badge rel-${node.relation}">${node.relation === "root" ? "query" : node.relation} relative to "${escapeHtml(rootQuery)}"</span>
+      <span class="rel-badge rel-${node.relation}">${node.relation === "root" ? "query" : node.relation}${node.curated ? " · Wikidata" : ""} relative to "${escapeHtml(rootQuery)}"</span>
       <button class="graph-detail-concept" data-tag="${escapeHtml(node.label)}">📖 Synthesis page</button>
       <button class="graph-detail-search" data-tag="${escapeHtml(node.label)}">Search «${escapeHtml(node.label)}»</button>${expandBtn}
     </div>
@@ -742,8 +894,9 @@ document.getElementById("concept-path-form").addEventListener("submit", async (e
   }
 });
 
-function renderConceptPath(path) {
-  const el = document.getElementById("concept-path-result");
+// el defaults to the Concept Path panel, but the Compare modal reuses this for its own
+// "how they connect" section rather than duplicating the rendering logic.
+function renderConceptPath(path, el = document.getElementById("concept-path-result")) {
   if (!path || !path.length) {
     el.textContent = "No link found within a few steps — that doesn't mean one doesn't exist, just that it didn't surface with the available data.";
     return;
@@ -753,6 +906,80 @@ function renderConceptPath(path) {
     return `${relLabel}<span class="trail-chip">${escapeHtml(step.tag)}</span>`;
   }).join(" ");
 }
+
+// --- Compare two concepts --- shares the "Link with another concept" input with the path
+// finder above: A is the current search's root query, B is whatever the user typed.
+document.getElementById("compare-btn").addEventListener("click", () => {
+  const to = document.getElementById("concept-path-input").value.trim();
+  if (!to || !currentQuery) return;
+  openComparePage(currentQuery, to);
+});
+
+async function openComparePage(tagA, tagB) {
+  const modal = document.getElementById("compare-modal");
+  const defsA = document.getElementById("compare-defs-a");
+  const defsB = document.getElementById("compare-defs-b");
+  const onlyA = document.getElementById("compare-only-a");
+  const onlyB = document.getElementById("compare-only-b");
+  const sharedSection = document.getElementById("compare-shared-section");
+  const sharedTags = document.getElementById("compare-shared-tags");
+  const pathResult = document.getElementById("compare-path-result");
+
+  document.getElementById("compare-title-a").textContent = tagA;
+  document.getElementById("compare-title-b").textContent = tagB;
+  document.getElementById("compare-label-a").textContent = tagA;
+  document.getElementById("compare-label-b").textContent = tagB;
+  defsA.innerHTML = `<p class="concept-loading">Loading…</p>`;
+  defsB.innerHTML = `<p class="concept-loading">Loading…</p>`;
+  onlyA.innerHTML = "";
+  onlyB.innerHTML = "";
+  sharedTags.innerHTML = "";
+  sharedSection.classList.add("hidden");
+  pathResult.textContent = "Searching for a link…";
+  modal.classList.remove("hidden");
+
+  const safe = safeCheckbox.checked;
+  try {
+    const [dataA, dataB, pathData] = await Promise.all([
+      fetch(`${API_BASE}/concept?tag=${encodeURIComponent(tagA)}&safe=${safe}`).then((r) => r.json()),
+      fetch(`${API_BASE}/concept?tag=${encodeURIComponent(tagB)}&safe=${safe}`).then((r) => r.json()),
+      fetch(`${API_BASE}/graph/path?from=${encodeURIComponent(tagA)}&to=${encodeURIComponent(tagB)}`).then((r) => r.json()),
+    ]);
+
+    renderDefinitionsInto(defsA, dataA.definitions);
+    renderDefinitionsInto(defsB, dataB.definitions);
+
+    const relatedA = dataA.relatedTags ?? [];
+    const relatedB = dataB.relatedTags ?? [];
+    const tagsASet = new Set(relatedA.map((t) => t.tag));
+    const tagsBSet = new Set(relatedB.map((t) => t.tag));
+
+    const shared = relatedA.filter((t) => tagsBSet.has(t.tag));
+    const exclusiveA = relatedA.filter((t) => !tagsBSet.has(t.tag));
+    const exclusiveB = relatedB.filter((t) => !tagsASet.has(t.tag));
+
+    if (shared.length) {
+      sharedSection.classList.remove("hidden");
+      sharedTags.innerHTML = shared.map((t) => tagChipHtml(t)).join("");
+    }
+    onlyA.innerHTML = exclusiveA.length
+      ? exclusiveA.map((t) => tagChipHtml(t)).join("")
+      : `<span class="graph-detail-empty">Nothing exclusive found.</span>`;
+    onlyB.innerHTML = exclusiveB.length
+      ? exclusiveB.map((t) => tagChipHtml(t)).join("")
+      : `<span class="graph-detail-empty">Nothing exclusive found.</span>`;
+
+    [sharedTags, onlyA, onlyB].forEach((container) => wireTagChips(container, closeCompareModal));
+
+    renderConceptPath(pathData.path, pathResult);
+  } catch (err) {
+    defsA.innerHTML = `<p class="concept-empty">Loading error: ${escapeHtml(err.message)}</p>`;
+    defsB.innerHTML = "";
+    pathResult.textContent = "";
+  }
+}
+
+const closeCompareModal = setupModal("compare-modal", "compare-modal-close", "compare-modal-backdrop");
 
 // --- Concept synthesis page --- definition + matched results + related concepts, one place
 // Groups the same related-tags data by relation into a rough "before / this / after" reading
@@ -787,7 +1014,7 @@ async function openConceptPage(node, rootQuery) {
 
   title.textContent = node.label;
   relationBadge.className = `rel-badge rel-${node.relation}`;
-  relationBadge.textContent = `${node.relation === "root" ? "query" : node.relation} relative to "${rootQuery}"`;
+  relationBadge.textContent = `${node.relation === "root" ? "query" : node.relation}${node.curated ? " · Wikidata" : ""} relative to "${rootQuery}"`;
   defsEl.innerHTML = `<p class="concept-loading">Loading definition…</p>`;
   relatedList.innerHTML = `<p class="concept-loading">Loading related concepts…</p>`;
   searchBtn.onclick = () => {
@@ -828,34 +1055,19 @@ async function openConceptPage(node, rootQuery) {
     const res = await fetch(`${API_BASE}/concept?tag=${encodeURIComponent(node.label)}&safe=${safe}`);
     const data = await res.json();
 
-    defsEl.innerHTML = data.definitions?.length
-      ? definitionCardsHtml(data.definitions)
-      : `<p class="concept-empty">No definition found for this term.</p>`;
+    renderDefinitionsInto(defsEl, data.definitions);
 
     const related = (data.relatedTags ?? []).filter((t) => t.tag !== node.label.toLowerCase());
     relatedSection.classList.toggle("hidden", related.length === 0);
     relatedList.innerHTML = renderLearningOrder(related);
-    relatedList.querySelectorAll(".tag-chip").forEach((chip) => {
-      chip.addEventListener("click", () => {
-        closeConceptModal();
-        searchTag(chip.dataset.tag, node.label, chip.dataset.relation);
-      });
-    });
+    wireTagChips(relatedList, closeConceptModal, node.label);
   } catch (err) {
     defsEl.innerHTML = `<p class="concept-empty">Loading error: ${escapeHtml(err.message)}</p>`;
     relatedList.innerHTML = "";
   }
 }
 
-function closeConceptModal() {
-  document.getElementById("concept-modal").classList.add("hidden");
-}
-
-document.getElementById("concept-modal-close").addEventListener("click", closeConceptModal);
-document.getElementById("concept-modal-backdrop").addEventListener("click", closeConceptModal);
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeConceptModal();
-});
+const closeConceptModal = setupModal("concept-modal", "concept-modal-close", "concept-modal-backdrop");
 
 // Renders the result grid, using a text-specific layout for the texts category
 function renderResults(items, category) {
@@ -973,15 +1185,7 @@ function renderModalRelated(item) {
   });
 }
 
-function closeModal() {
-  document.getElementById("result-modal").classList.add("hidden");
-}
-
-document.getElementById("modal-close").addEventListener("click", closeModal);
-document.getElementById("modal-backdrop").addEventListener("click", closeModal);
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
-});
+const closeModal = setupModal("result-modal", "modal-close", "modal-backdrop");
 
 function setStatus(msg) { document.getElementById("status-message").textContent = msg; }
 function clearResults() {
@@ -999,8 +1203,12 @@ function escapeHtml(str) {
 
 // Shared by the graph detail panel and the concept page's related-concepts lists
 function tagChipHtml(t, extra = "") {
-  return `<button class="tag-chip ${t.relation}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${t.relation}">${escapeHtml(t.tag)}${extra}</button>`;
+  const curatedClass = t.curated ? " curated" : "";
+  const curatedMark = t.curated ? `<span class="curated-mark" title="Curated fact from Wikidata">✦</span> ` : "";
+  const title = t.curated ? `${t.relation} — curated fact from Wikidata` : t.relation;
+  return `<button class="tag-chip ${t.relation}${curatedClass}" data-tag="${escapeHtml(t.tag)}" data-relation="${t.relation}" title="${title}">${curatedMark}${escapeHtml(t.tag)}${extra}</button>`;
 }
 
 // Show whatever was already explored in previous visits/searches, before any new search runs
 renderTrail(loadTrail());
+renderSavedPaths();

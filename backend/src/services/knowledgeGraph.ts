@@ -2,46 +2,38 @@
 
 import { SearchItem } from "../connectors/types";
 import { textRelatesToQuery } from "./textRelevance";
+import { fetchFromWikidata } from "./wikidata";
+import { fetchJson } from "./fetchJson";
 
 type RelationType = "synonym" | "related" | "broader" | "narrower";
 
 interface Relation {
   type: RelationType;
   target: string;
-  frequency?: number; // 0-100 vs top scorer in its relation type; unset for ConceptNet
+  frequency?: number; // 0-100 vs top scorer in its relation type; unset for curated (Wikidata) relations
+  curated?: boolean; // true for structured facts (Wikidata), unset for lexical association
 }
 
 export interface RelatedTag {
   tag: string;
   relation: RelationType;
   frequency?: number;
+  curated?: boolean;
 }
 
-const FETCH_TIMEOUT_MS = 5000;
 const RELATIONS_CACHE_TTL_MS = 30 * 60 * 1000;
 const relationsCache = new Map<string, { relations: Relation[]; expiresAt: number }>();
-const NODE_CAP = 12; // "una decina" of related nodes shown per query, plus the root
+// De-dups concurrent callers requesting the same term (e.g. expandQuery + getRelatedTags
+// racing Wikidata for the same tag) so they share one in-flight request instead of each
+// getting an independent, possibly-empty result.
+const inFlightRelations = new Map<string, Promise<Relation[]>>();
+const NODE_CAP = 12; // related nodes shown per query, plus the root
 const RELATED_CAP = 7; // trigger/context words need more headroom than lexical relations
-// Per-word cap when a multi-word query falls back to per-word lookup: higher than RELATED_CAP
-// because each word's own list still wastes ~1 slot on the OTHER query word (e.g. "bonaparte"
-// shows up in "napoleon"'s own trigger list) before the outer merge filters it back out.
+// Per-word cap for the multi-word fallback: higher than RELATED_CAP since each word's list
+// still wastes a slot on the other query word before the outer merge filters it back out.
 const MULTIWORD_RELATED_CAP = 10;
 
-async function fetchJson(url: string): Promise<any | undefined> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return undefined;
-    return await res.json();
-  } catch {
-    return undefined;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Datamuse: no API key needed, more reliably up than ConceptNet. rel_* codes map to our taxonomy.
+// Datamuse: no API key needed. rel_* codes map to our taxonomy.
 async function fetchFromDatamuse(term: string, relatedCap: number = RELATED_CAP): Promise<Relation[]> {
   const encoded = encodeURIComponent(term);
   // md=p: part-of-speech tags, used by ambiguityRank below. rel_trg's own max is 15, not 6 like
@@ -95,40 +87,13 @@ async function fetchFromDatamuse(term: string, relatedCap: number = RELATED_CAP)
   return relations;
 }
 
-// Fallback, tried only if Datamuse yields nothing
-async function fetchFromConceptNet(term: string): Promise<Relation[]> {
-  const encoded = encodeURIComponent(term.replace(/\s+/g, "_"));
-  const data = await fetchJson(`https://api.conceptnet.io/c/en/${encoded}?limit=20`);
-  if (!data) return [];
-
-  const edges: any[] = data.edges ?? [];
-  const relations: Relation[] = [];
-  const seen = new Set<string>();
-
-  for (const e of edges) {
-    const startId: string = e.start?.["@id"] ?? "";
-    const endId: string = e.end?.["@id"] ?? "";
-    const startLabel: string | undefined = e.start?.label?.toLowerCase();
-    const endLabel: string | undefined = e.end?.label?.toLowerCase();
-    const relLabel: string | undefined = e.rel?.label;
-    if (!startLabel || !endLabel || !relLabel) continue;
-    if (!startId.startsWith("/c/en/") || !endId.startsWith("/c/en/")) continue;
-
-    const isStart = startLabel === term.toLowerCase();
-    const target = isStart ? endLabel : startLabel;
-    if (target === term.toLowerCase() || seen.has(target)) continue;
-
-    let type: RelationType;
-    if (relLabel === "Synonym") type = "synonym";
-    else if (relLabel === "IsA") type = isStart ? "broader" : "narrower";
-    else type = "related";
-
-    relations.push({ type, target });
-    seen.add(target);
-    if (relations.length >= NODE_CAP) break;
-  }
-
-  return relations;
+// Curated facts lead, lexical association fills in the rest: dedupes by target (a curated
+// entry wins over a lexical one for the same word) and caps the combined list at NODE_CAP so
+// layering a second source never blows up the graph size. Pure/exported for testing.
+export function mergeRelations(curated: Relation[], lexical: Relation[], cap: number): Relation[] {
+  const seen = new Set(curated.map((r) => r.target));
+  const rest = lexical.filter((r) => !seen.has(r.target));
+  return [...curated, ...rest].slice(0, cap);
 }
 
 async function getRelations(term: string, relatedCap: number = RELATED_CAP): Promise<Relation[]> {
@@ -136,14 +101,29 @@ async function getRelations(term: string, relatedCap: number = RELATED_CAP): Pro
   const cached = relationsCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.relations;
 
-  let relations = await fetchFromDatamuse(term, relatedCap);
-  if (relations.length === 0) relations = await fetchFromConceptNet(term);
+  const pending = inFlightRelations.get(cacheKey);
+  if (pending) return pending;
 
-  // Only cache real results, so a failure doesn't parrot the outage for the full TTL
-  if (relations.length > 0) {
-    relationsCache.set(cacheKey, { relations, expiresAt: Date.now() + RELATIONS_CACHE_TTL_MS });
+  const promise = (async (): Promise<Relation[]> => {
+    const [curated, lexical] = await Promise.all([
+      fetchFromWikidata(term),
+      fetchFromDatamuse(term, relatedCap),
+    ]);
+    const relations = mergeRelations(curated, lexical, NODE_CAP);
+
+    // Only cache real results, so a failure doesn't parrot the outage for the full TTL
+    if (relations.length > 0) {
+      relationsCache.set(cacheKey, { relations, expiresAt: Date.now() + RELATIONS_CACHE_TTL_MS });
+    }
+    return relations;
+  })();
+
+  inFlightRelations.set(cacheKey, promise);
+  try {
+    return await promise;
+  } finally {
+    inFlightRelations.delete(cacheKey);
   }
-  return relations;
 }
 
 export async function expandQuery(query: string): Promise<string[]> {
@@ -190,7 +170,7 @@ export async function getRelatedTags(query: string): Promise<RelatedTag[]> {
     }
   }
 
-  return relations.map((r) => ({ tag: r.target, relation: r.type, frequency: r.frequency }));
+  return relations.map((r) => ({ tag: r.target, relation: r.type, frequency: r.frequency, curated: r.curated }));
 }
 
 export interface ConceptPathStep {
@@ -243,6 +223,7 @@ export interface GraphNode {
   matchCount: number;
   matchedIds: string[];
   frequency?: number;
+  curated?: boolean;
 }
 
 export interface GraphEdge {
@@ -274,7 +255,7 @@ export function buildGraphNodes(
   ];
   const edges: GraphEdge[] = [];
 
-  for (const { tag, relation, frequency } of relatedTags) {
+  for (const { tag, relation, frequency, curated } of relatedTags) {
     const matched = itemsMatchingTag(items, tag);
     nodes.push({
       id: tag,
@@ -283,6 +264,7 @@ export function buildGraphNodes(
       matchCount: matched.length,
       matchedIds: matched.map((i) => i.id),
       frequency,
+      curated,
     });
     edges.push({ source: rootId, target: tag, relation });
   }

@@ -36,9 +36,24 @@ export function safeResult(source: string, err: unknown): ConnectorResult {
   return { items: [], total: 0, source, error: message };
 }
 
-// Every "api"-type connector was hand-writing the same fetch/check/parse/catch shell around
-// its own URL and its own JSON-to-SearchItem mapping. This keeps that one-off logic — the
-// only part that actually differs per source — inline at the call site, and shares the rest.
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#039;": "'", "&nbsp;": " ",
+  "&ndash;": "–", "&mdash;": "—", "&hellip;": "…",
+};
+
+// Strips HTML tags from a MediaWiki search snippet and decodes the entities it leaves
+// behind (e.g. "Newton&#039;s" -> "Newton's") — plain .replace(/<[^>]+>/g, "") alone
+// leaves those entities as literal text once re-escaped for display.
+export function stripHtml(html: string | undefined): string | undefined {
+  if (!html) return html;
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&\w+;/g, (entity) => HTML_ENTITIES[entity] ?? entity);
+}
+
+// Shared fetch/parse/catch shell for "api"-type connectors — only the URL and the
+// JSON-to-SearchItem mapping differ per source.
 export async function fetchJsonConnector(
   source: string,
   url: string,
@@ -48,6 +63,12 @@ export async function fetchJsonConnector(
   try {
     const res = await fetch(url, init);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // A 200 with a non-JSON body usually means an IP block, rate limit, or bad key —
+    // caught here so it reads as that instead of a cryptic JSON parse error.
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("json")) {
+      throw new Error(`Non-JSON response (${contentType || "unknown content type"}) — likely blocked, rate-limited, or an invalid key`);
+    }
     const data = await res.json();
     return { source, ...extract(data) };
   } catch (err) {
@@ -55,9 +76,8 @@ export async function fetchJsonConnector(
   }
 }
 
-// Same idea for "scraping"-type connectors: the caller fetches the HTML however it needs to
-// (plainFetchPage or the shared-tab-pool scrapePage) and does its own cheerio selectors —
-// this only wraps the load/try-catch/result-shape that was identical across every one of them.
+// Same idea for "scraping"-type connectors: caller fetches HTML and picks its own cheerio
+// selectors, this only wraps the shared load/try-catch/result-shape.
 export async function scrapeConnector(
   source: string,
   html: Promise<string> | string,

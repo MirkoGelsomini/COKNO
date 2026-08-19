@@ -56,6 +56,38 @@ function setCached(key: string, body: unknown): void {
   cache.set(key, { body, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
+// Same shape as a normal /search response, all zeroed — kept in one place so it can't drift
+// from the real response body when fields are added there.
+function blockedSearchResponse(q: string, cat: Category | undefined, pageNum: number, safeMode: boolean) {
+  return {
+    query: q,
+    expandedQuery: null,
+    relatedTags: [],
+    category: cat ?? "all",
+    page: pageNum,
+    safe: safeMode,
+    blockedQuery: true,
+    totalSources: 0,
+    totalItems: 0,
+    sources: [],
+    knowledgeGraph: {
+      nodes: [],
+      edges: [],
+      coverage: {
+        sourcesQueried: 0,
+        sourcesAvailable: 0,
+        sourcesWithResults: 0,
+        coveragePercent: 0,
+        availabilityPercent: 0,
+        categories: [],
+      },
+    },
+    definitions: [],
+    spellingSuggestion: null,
+    items: [],
+  };
+}
+
 // GET /api/search?q=nature&category=images&page=1&expand=false
 router.get("/search", async (req: Request, res: Response) => {
   const { q, category, page = "1", expand = "false", safe = "true" } = req.query;
@@ -73,33 +105,7 @@ router.get("/search", async (req: Request, res: Response) => {
 
   // Blocked queries are refused outright, not fanned out and filtered after the fact
   if (safeMode && isQueryBlocked(q)) {
-    return res.json({
-      query: q,
-      expandedQuery: null,
-      relatedTags: [],
-      category: cat ?? "all",
-      page: pageNum,
-      safe: safeMode,
-      blockedQuery: true,
-      totalSources: 0,
-      totalItems: 0,
-      sources: [],
-      knowledgeGraph: {
-        nodes: [],
-        edges: [],
-        coverage: {
-          sourcesQueried: 0,
-          sourcesAvailable: 0,
-          sourcesWithResults: 0,
-          coveragePercent: 0,
-          availabilityPercent: 0,
-          categories: [],
-        },
-      },
-      definitions: [],
-      spellingSuggestion: null,
-      items: [],
-    });
+    return res.json(blockedSearchResponse(q, cat, pageNum, safeMode));
   }
 
   const searchQuery = expand === "true" ? (await expandQuery(q)).join(" ") : q;
