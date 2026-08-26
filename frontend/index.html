@@ -10,7 +10,6 @@
 
   <header>
     <h1>Cokno</h1>
-    <p class="subtitle">A connected map of concepts — not just a search engine.</p>
 
     <form id="search-form">
       <div class="search-bar">
@@ -48,13 +47,11 @@
           <button id="trail-clear" class="trail-clear-btn">Clear trail</button>
         </div>
       </div>
-      <p class="trail-hint">The concepts you've explored this session, and how you got from one to the next.</p>
       <div id="trail-path"></div>
     </section>
 
     <section id="saved-paths-section" class="hidden">
       <h2>Saved paths</h2>
-      <p class="trail-hint">Saved on purpose — these stay even after you clear the trail above, so you can come back and check what you found.</p>
       <div id="saved-paths-list"></div>
     </section>
 
@@ -88,7 +85,6 @@
         <form id="concept-path-form">
           <input type="text" id="concept-path-input" placeholder="Link with another concept…" autocomplete="off" />
           <button type="submit">Find link</button>
-          <button type="button" id="compare-btn" class="secondary-btn">⇄ Compare</button>
         </form>
         <div id="concept-path-result"></div>
       </div>
@@ -144,41 +140,6 @@
       </div>
 
       <button id="concept-modal-search-btn" class="modal-open-btn">Search this term</button>
-    </div>
-  </div>
-
-  <div id="compare-modal" class="modal hidden">
-    <div id="compare-modal-backdrop"></div>
-    <div class="modal-content compare-modal-content">
-      <button id="compare-modal-close" class="modal-close" aria-label="Close">&times;</button>
-      <div id="compare-header">
-        <h2 id="compare-title-a"></h2>
-        <span class="compare-vs">vs</span>
-        <h2 id="compare-title-b"></h2>
-      </div>
-
-      <div id="compare-shared-section" class="concept-modal-section hidden">
-        <h3>In common</h3>
-        <div id="compare-shared-tags"></div>
-      </div>
-
-      <div id="compare-columns">
-        <div class="compare-col">
-          <div id="compare-defs-a"></div>
-          <h4>Only in <span id="compare-label-a"></span></h4>
-          <div id="compare-only-a"></div>
-        </div>
-        <div class="compare-col">
-          <div id="compare-defs-b"></div>
-          <h4>Only in <span id="compare-label-b"></span></h4>
-          <div id="compare-only-b"></div>
-        </div>
-      </div>
-
-      <div id="compare-path-section" class="concept-modal-section">
-        <h3>How they connect</h3>
-        <div id="compare-path-result"></div>
-      </div>
     </div>
   </div>
 

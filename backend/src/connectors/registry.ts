@@ -127,13 +127,11 @@ const all: Connector[] = [
   cambridge, stanfordPhilosophy, base, doab,
 ];
 
-// Returns all connectors, or only those in the given category
 export function getConnectors(category?: Category): Connector[] {
   if (!category) return all;
   return all.filter((c) => c.category === category);
 }
 
-// Groups connector names and types by category, for the /sources endpoint
 export function listSources(): Record<Category, { name: string; type: string }[]> {
   const result: any = {};
   for (const c of all) {

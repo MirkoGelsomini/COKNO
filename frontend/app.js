@@ -4,22 +4,25 @@ const PAGE_SIZE = 20; // fixed number of cards shown per click, regardless of ho
 
 let currentQuery = "";
 let currentCategory = "";
-let currentPage = 1; // backend page: each connector's own next batch of up to 12 items
-let subPage = 0; // client-side slice within the current backend page's combined pool
-let displayPage = 1; // page number shown to the user; advances by 1 per click regardless of the above
-let jumpToEnd = false; // set before going Precedente across a backend-page boundary
-let resultPool = []; // full combined item pool fetched for the current backend page
+
+// Three-tier pagination: currentPage is the backend page, subPage slices PAGE_SIZE cards out
+// of that page's pool client-side, displayPage is what the user sees and always advances by 1.
+let currentPage = 1;
+let subPage = 0;
+let displayPage = 1;
+let jumpToEnd = false;
+let resultPool = [];
+let allCategoriesPool = null; // last "All" fetch's items, for instant category-tab filtering
 let currentItems = [];
-let expandCache = {}; // tag -> {expandedTerms, relatedTags} from /graph/expand
-let pendingNavigation = null; // {from, relation} set right before a graph-driven search
-let activeFilter = null; // {ids: Set<string>, label} when a graph node is narrowing the results list
+let expandCache = {};
+let pendingNavigation = null;
+let activeFilter = null;
 
-let graphState = null; // { rootId, rootQuery, selectedId, nodesById: Map<id, node> }
-const EXPAND_CHILD_CAP = 6; // new nodes added per "Espandi nel grafo" click
-const GRAPH_NODE_CAP = 40; // total nodes across all levels before further expansion is blocked
+let graphState = null;
+const EXPAND_CHILD_CAP = 6;
+const GRAPH_NODE_CAP = 40;
 
-// Wires close button + backdrop click + shared Escape key for a modal. onClose runs any
-// extra cleanup (e.g. clearing state) before the modal is hidden.
+// Wires close button + backdrop + Escape key for a modal
 function setupModal(modalId, closeBtnId, backdropId, onClose) {
   const close = () => {
     document.getElementById(modalId).classList.add("hidden");
@@ -45,9 +48,25 @@ document.querySelectorAll(".tab").forEach((btn) => {
     btn.classList.add("active");
     currentCategory = btn.dataset.category;
     resetPaging();
-    if (currentQuery) runSearch();
+    if (!currentQuery) return;
+    // Already have every category from the last "All" fetch — filter instead of re-querying
+    if (allCategoriesPool) {
+      applyCategoryFilter();
+    } else {
+      runSearch();
+    }
   });
 });
+
+// Instant, no network: slices the already-downloaded "All" pool down to this category.
+function applyCategoryFilter() {
+  resultPool = currentCategory
+    ? allCategoriesPool.filter((item) => item.category === currentCategory)
+    : allCategoriesPool;
+  subPage = 0;
+  renderResultsSlice();
+  setStatus(resultPool.length === 0 ? "No results found." : "");
+}
 
 document.getElementById("search-form").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -58,7 +77,6 @@ document.getElementById("search-form").addEventListener("submit", (e) => {
   runSearch();
 });
 
-// Safe search preference persists across visits, default on
 const safeCheckbox = document.getElementById("safe-checkbox");
 const storedSafe = localStorage.getItem("safeSearch");
 safeCheckbox.checked = storedSafe === null ? true : storedSafe === "true";
@@ -75,7 +93,7 @@ async function runSearch() {
   const expand = document.getElementById("expand-checkbox").checked;
   const safe = safeCheckbox.checked;
   const nav = pendingNavigation;
-  pendingNavigation = null; // only applies to this one search
+  pendingNavigation = null;
   let url = `${API_BASE}/search?q=${encodeURIComponent(currentQuery)}&expand=${expand}&safe=${safe}&page=${currentPage}`;
   if (currentCategory) url += `&category=${currentCategory}`;
 
@@ -86,6 +104,8 @@ async function runSearch() {
 
     currentItems = data.items;
     resultPool = data.items;
+    // Only an "All" fetch covers every category; a category-scoped fetch invalidates the cache
+    allCategoriesPool = currentCategory ? null : data.items;
     if (jumpToEnd) {
       subPage = Math.max(0, Math.ceil(resultPool.length / PAGE_SIZE) - 1);
       jumpToEnd = false;
@@ -211,10 +231,9 @@ document.getElementById("trail-clear").addEventListener("click", () => {
   renderTrail([]);
 });
 
-// --- Saved paths --- deliberate snapshots of the trail, kept separate from it so clearing
-// the (always-growing) trail above never loses something the user chose to keep.
+// --- Saved paths --- deliberate snapshots of the trail, kept separate so clearing it never loses one
 const SAVED_PATHS_KEY = "coknoSavedPaths";
-let reviewState = null; // { path, index } while the review modal is open
+let reviewState = null;
 
 function loadSavedPaths() {
   try {
@@ -273,9 +292,7 @@ function openPathReview(path) {
   renderReviewStep();
 }
 
-// Re-fetches the definition/related concepts for the step's term on demand — the saved
-// path only stores the query/relation, not a snapshot of the content, so review always
-// shows current data rather than a possibly-stale copy.
+// Re-fetches the term's definition/related concepts on demand rather than storing a snapshot
 async function renderReviewStep() {
   const { path, index } = reviewState;
   const step = path.trail[index];
@@ -395,7 +412,6 @@ function goPrevPage() {
   document.getElementById("results-section").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Renders result count, per-source badges and related-tag chips
 function renderMeta(data) {
   document.getElementById("meta-section").classList.remove("hidden");
 
@@ -439,15 +455,13 @@ function definitionCardsHtml(definitions) {
   `).join("");
 }
 
-// Renders a definitions list (or its empty state) into el — shared by every concept view.
 function renderDefinitionsInto(el, definitions) {
   el.innerHTML = definitions?.length
     ? definitionCardsHtml(definitions)
     : `<p class="concept-empty">No definition found for this term.</p>`;
 }
 
-// Wires every .tag-chip in container to pivot the search to it, closing the given modal
-// first if there is one (omit closeFn for chips that live outside a modal).
+// Wires every .tag-chip to pivot the search to it (omit closeFn for chips outside a modal)
 function wireTagChips(container, closeFn, fromQuery) {
   container.querySelectorAll(".tag-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
@@ -493,10 +507,8 @@ function searchTag(tag, fromQuery, relation) {
 }
 
 // --- Knowledge Map ---
-// Mirrors backend/textRelevance.ts, so nodes added by expanding a branch can compute their
-// own match count against resultPool client-side, the same way the server does.
-// Kept in sync with backend/services/textRelevance.ts's sameStem — see its comment for why
-// the cap is 6, not 4 (avoids collisions like "principia" ~ "prince" on a shared "prin").
+// Mirrors backend/services/textRelevance.ts, so nodes added by expanding a branch can compute
+// their own match count against resultPool client-side. Keep the two in sync.
 function sameStemJS(a, b) {
   const n = Math.min(a.length, b.length, 6);
   return n >= 3 && a.slice(0, n) === b.slice(0, n);
@@ -518,8 +530,7 @@ function itemsMatchingTagJS(items, tag) {
   });
 }
 
-// Entry point for a new search result: rebuilds graphState from scratch, discarding any
-// branches expanded on a previous query
+// Rebuilds graphState from scratch for a new search, discarding previously expanded branches
 function renderGraph(graph, query) {
   const section = document.getElementById("graph-section");
   const coverageBadge = document.getElementById("coverage-badge");
@@ -894,8 +905,6 @@ document.getElementById("concept-path-form").addEventListener("submit", async (e
   }
 });
 
-// el defaults to the Concept Path panel, but the Compare modal reuses this for its own
-// "how they connect" section rather than duplicating the rendering logic.
 function renderConceptPath(path, el = document.getElementById("concept-path-result")) {
   if (!path || !path.length) {
     el.textContent = "No link found within a few steps — that doesn't mean one doesn't exist, just that it didn't surface with the available data.";
@@ -906,80 +915,6 @@ function renderConceptPath(path, el = document.getElementById("concept-path-resu
     return `${relLabel}<span class="trail-chip">${escapeHtml(step.tag)}</span>`;
   }).join(" ");
 }
-
-// --- Compare two concepts --- shares the "Link with another concept" input with the path
-// finder above: A is the current search's root query, B is whatever the user typed.
-document.getElementById("compare-btn").addEventListener("click", () => {
-  const to = document.getElementById("concept-path-input").value.trim();
-  if (!to || !currentQuery) return;
-  openComparePage(currentQuery, to);
-});
-
-async function openComparePage(tagA, tagB) {
-  const modal = document.getElementById("compare-modal");
-  const defsA = document.getElementById("compare-defs-a");
-  const defsB = document.getElementById("compare-defs-b");
-  const onlyA = document.getElementById("compare-only-a");
-  const onlyB = document.getElementById("compare-only-b");
-  const sharedSection = document.getElementById("compare-shared-section");
-  const sharedTags = document.getElementById("compare-shared-tags");
-  const pathResult = document.getElementById("compare-path-result");
-
-  document.getElementById("compare-title-a").textContent = tagA;
-  document.getElementById("compare-title-b").textContent = tagB;
-  document.getElementById("compare-label-a").textContent = tagA;
-  document.getElementById("compare-label-b").textContent = tagB;
-  defsA.innerHTML = `<p class="concept-loading">Loading…</p>`;
-  defsB.innerHTML = `<p class="concept-loading">Loading…</p>`;
-  onlyA.innerHTML = "";
-  onlyB.innerHTML = "";
-  sharedTags.innerHTML = "";
-  sharedSection.classList.add("hidden");
-  pathResult.textContent = "Searching for a link…";
-  modal.classList.remove("hidden");
-
-  const safe = safeCheckbox.checked;
-  try {
-    const [dataA, dataB, pathData] = await Promise.all([
-      fetch(`${API_BASE}/concept?tag=${encodeURIComponent(tagA)}&safe=${safe}`).then((r) => r.json()),
-      fetch(`${API_BASE}/concept?tag=${encodeURIComponent(tagB)}&safe=${safe}`).then((r) => r.json()),
-      fetch(`${API_BASE}/graph/path?from=${encodeURIComponent(tagA)}&to=${encodeURIComponent(tagB)}`).then((r) => r.json()),
-    ]);
-
-    renderDefinitionsInto(defsA, dataA.definitions);
-    renderDefinitionsInto(defsB, dataB.definitions);
-
-    const relatedA = dataA.relatedTags ?? [];
-    const relatedB = dataB.relatedTags ?? [];
-    const tagsASet = new Set(relatedA.map((t) => t.tag));
-    const tagsBSet = new Set(relatedB.map((t) => t.tag));
-
-    const shared = relatedA.filter((t) => tagsBSet.has(t.tag));
-    const exclusiveA = relatedA.filter((t) => !tagsBSet.has(t.tag));
-    const exclusiveB = relatedB.filter((t) => !tagsASet.has(t.tag));
-
-    if (shared.length) {
-      sharedSection.classList.remove("hidden");
-      sharedTags.innerHTML = shared.map((t) => tagChipHtml(t)).join("");
-    }
-    onlyA.innerHTML = exclusiveA.length
-      ? exclusiveA.map((t) => tagChipHtml(t)).join("")
-      : `<span class="graph-detail-empty">Nothing exclusive found.</span>`;
-    onlyB.innerHTML = exclusiveB.length
-      ? exclusiveB.map((t) => tagChipHtml(t)).join("")
-      : `<span class="graph-detail-empty">Nothing exclusive found.</span>`;
-
-    [sharedTags, onlyA, onlyB].forEach((container) => wireTagChips(container, closeCompareModal));
-
-    renderConceptPath(pathData.path, pathResult);
-  } catch (err) {
-    defsA.innerHTML = `<p class="concept-empty">Loading error: ${escapeHtml(err.message)}</p>`;
-    defsB.innerHTML = "";
-    pathResult.textContent = "";
-  }
-}
-
-const closeCompareModal = setupModal("compare-modal", "compare-modal-close", "compare-modal-backdrop");
 
 // --- Concept synthesis page --- definition + matched results + related concepts, one place
 // Groups the same related-tags data by relation into a rough "before / this / after" reading
@@ -1022,7 +957,6 @@ async function openConceptPage(node, rootQuery) {
     searchTag(node.label, rootQuery, node.relation);
   };
 
-  // Already in hand from the current search — no extra request needed for this part
   const matchedIds = new Set(node.matchedIds ?? []);
   const matchedItems = currentItems.filter((item) => matchedIds.has(item.id));
   if (matchedItems.length) {
@@ -1069,7 +1003,6 @@ async function openConceptPage(node, rootQuery) {
 
 const closeConceptModal = setupModal("concept-modal", "concept-modal-close", "concept-modal-backdrop");
 
-// Renders the result grid, using a text-specific layout for the texts category
 function renderResults(items, category) {
   const grid = document.getElementById("results-grid");
   grid.innerHTML = "";

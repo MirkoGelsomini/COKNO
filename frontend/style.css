@@ -11,12 +11,14 @@ header {
   padding: 2.5rem 2rem 2rem;
   text-align: center;
   border-bottom: 1px solid #222;
+  background: #0f0f0f;
 }
 
 header h1 {
   font-size: 2.8rem;
   font-weight: 700;
   letter-spacing: -1px;
+  margin-bottom: 1.5rem;
   background: linear-gradient(135deg, #fff 0%, #888 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -430,7 +432,7 @@ main {
 .safe-toggle { margin-left: 0.2rem; }
 
 /* --- Saved paths --- */
-#saved-paths-section { margin-top: 1.5rem; }
+#saved-paths-section { margin-top: 1.5rem; margin-bottom: 1.5rem; }
 #saved-paths-section h2 { font-size: 1rem; color: #ccc; font-weight: 600; margin-bottom: 0.3rem; }
 
 #saved-paths-list {
@@ -785,13 +787,6 @@ main {
 }
 #concept-path-form button:hover { background: #ddd; }
 
-#concept-path-form .secondary-btn {
-  background: transparent;
-  color: #ccc;
-  border: 1px solid #333;
-}
-#concept-path-form .secondary-btn:hover { background: transparent; border-color: #666; color: #fff; }
-
 #concept-path-result {
   margin-top: 0.7rem;
   font-size: 0.82rem;
@@ -1012,59 +1007,6 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-/* --- Compare modal --- */
-.compare-modal-content { max-width: 880px; }
-
-#compare-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.2rem;
-  padding-right: 1.5rem;
-}
-#compare-header h2 { font-size: 1.2rem; color: #eee; }
-.compare-vs { font-size: 0.85rem; color: #666; }
-
-#compare-shared-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-#compare-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  padding-top: 1.2rem;
-  border-top: 1px solid #222;
-}
-
-.compare-col h4 {
-  font-size: 0.78rem;
-  color: #888;
-  font-weight: 500;
-  margin: 0.9rem 0 0.5rem;
-}
-
-.compare-col > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-}
-
-.compare-col .definition-card { font-size: 0.85rem; }
-
-#compare-only-a, #compare-only-b {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-@media (max-width: 640px) {
-  #compare-columns { grid-template-columns: 1fr; }
 }
 
 /* --- Saved path review modal --- */
