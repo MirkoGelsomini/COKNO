@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cokno — Connected Concept Explorer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>Cokno</h1>
+
+    <form id="search-form">
+      <div class="search-bar">
+        <input type="text" id="query-input" placeholder="Search anything…" autocomplete="off" />
+        <label class="expand-toggle">
+          <input type="checkbox" id="expand-checkbox" />
+          <span>Expand query</span>
+        </label>
+        <label class="expand-toggle safe-toggle">
+          <input type="checkbox" id="safe-checkbox" checked />
+          <span>Safe Search</span>
+        </label>
+        <button type="submit">Search</button>
+      </div>
+    </form>
+
+    <div id="spelling-suggestion" class="hidden"></div>
+
+    <nav class="category-tabs">
+      <button class="tab active" data-category="">All</button>
+      <button class="tab" data-category="images">Images</button>
+      <button class="tab" data-category="videos">Videos</button>
+      <button class="tab" data-category="gifs">GIFs</button>
+      <button class="tab" data-category="models3d">3D Models</button>
+      <button class="tab" data-category="texts">Texts</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="trail-section" class="hidden">
+      <div id="trail-header">
+        <h2>Knowledge trail</h2>
+        <div class="trail-header-actions">
+          <button id="trail-save" class="trail-clear-btn">💾 Save path</button>
+          <button id="trail-clear" class="trail-clear-btn">Clear trail</button>
+        </div>
+      </div>
+      <div id="trail-path"></div>
+    </section>
+
+    <section id="saved-paths-section" class="hidden">
+      <h2>Saved paths</h2>
+      <div id="saved-paths-list"></div>
+    </section>
+
+    <section id="meta-section" class="hidden">
+      <div id="query-info"></div>
+      <details id="source-details">
+        <summary id="source-summary"></summary>
+        <div id="source-badges"></div>
+      </details>
+      <div id="related-tags"></div>
+    </section>
+
+    <section id="definitions-section" class="hidden">
+      <h2>Definition</h2>
+      <div id="definitions-list"></div>
+    </section>
+
+    <section id="graph-section" class="hidden">
+      <div id="graph-header">
+        <h2>Knowledge Map</h2>
+        <div id="coverage-badge"></div>
+      </div>
+      <div id="graph-canvas">
+        <div id="graph-inner">
+          <svg id="graph-edges"></svg>
+        </div>
+      </div>
+      <div id="graph-detail" class="hidden"></div>
+
+      <div id="concept-path-section">
+        <form id="concept-path-form">
+          <input type="text" id="concept-path-input" placeholder="Link with another concept…" autocomplete="off" />
+          <button type="submit">Find link</button>
+        </form>
+        <div id="concept-path-result"></div>
+      </div>
+    </section>
+
+    <section id="results-section">
+      <div id="status-message"></div>
+      <div id="result-filter-banner" class="hidden"></div>
+      <div id="results-grid"></div>
+      <div id="pagination" class="hidden"></div>
+    </section>
+  </main>
+
+  <div id="result-modal" class="modal hidden">
+    <div id="modal-backdrop"></div>
+    <div class="modal-content">
+      <button id="modal-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="modal-media"></div>
+      <div id="modal-body">
+        <span id="modal-source" class="card-source"></span>
+        <h2 id="modal-title"></h2>
+        <p id="modal-author" class="card-author"></p>
+        <p id="modal-desc" class="card-desc"></p>
+        <div id="modal-tags" class="card-tags"></div>
+        <a id="modal-open-link" href="#" target="_blank" rel="noopener" class="modal-open-btn">Open source ↗</a>
+      </div>
+      <div id="modal-related" class="hidden">
+        <h3>Related results</h3>
+        <div id="modal-related-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="concept-modal" class="modal hidden">
+    <div id="concept-modal-backdrop"></div>
+    <div class="modal-content concept-modal-content">
+      <button id="concept-modal-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="concept-modal-header">
+        <span id="concept-modal-relation" class="rel-badge"></span>
+        <h2 id="concept-modal-title"></h2>
+      </div>
+
+      <div id="concept-modal-definitions" class="concept-modal-section"></div>
+
+      <div id="concept-modal-media" class="concept-modal-section hidden">
+        <h3>Results from this search</h3>
+        <div id="concept-modal-media-grid"></div>
+      </div>
+
+      <div id="concept-modal-related" class="concept-modal-section">
+        <h3>Related concepts</h3>
+        <div id="concept-modal-related-list"></div>
+      </div>
+
+      <button id="concept-modal-search-btn" class="modal-open-btn">Search this term</button>
+    </div>
+  </div>
+
+  <div id="path-review-modal" class="modal hidden">
+    <div id="path-review-backdrop"></div>
+    <div class="modal-content concept-modal-content">
+      <button id="path-review-close" class="modal-close" aria-label="Close">&times;</button>
+      <div id="path-review-header">
+        <h2 id="path-review-title"></h2>
+        <button id="path-review-delete" class="trail-clear-btn">Delete path</button>
+      </div>
+
+      <div id="path-review-nav">
+        <button id="path-review-prev" type="button">‹ Previous</button>
+        <span id="path-review-step"></span>
+        <button id="path-review-next" type="button">Next ›</button>
+      </div>
+
+      <div id="path-review-body">
+        <span id="path-review-relation" class="rel-badge"></span>
+        <h3 id="path-review-concept"></h3>
+        <div id="path-review-definitions" class="concept-modal-section"></div>
+        <div class="concept-modal-section">
+          <h3>Related concepts</h3>
+          <div id="path-review-related-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
